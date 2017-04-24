@@ -55,6 +55,7 @@ import io.crate.operation.tablefunctions.TableFunctionModule;
 import io.crate.protocols.postgres.PostgresNetty;
 import io.crate.rest.action.RestSQLAction;
 import io.crate.settings.CrateSetting;
+import io.crate.settings.SharedSettings;
 import org.elasticsearch.action.bulk.BulkModule;
 import org.elasticsearch.action.bulk.BulkRetryCoordinatorPool;
 import org.elasticsearch.cluster.routing.allocation.decider.AllocationDecider;
@@ -106,6 +107,10 @@ public class SQLPlugin extends Plugin implements ActionPlugin, MapperPlugin, Clu
         // Postgres settings are node settings
         settings.add(PostgresNetty.PSQL_ENABLED_SETTING.setting());
         settings.add(PostgresNetty.PSQL_PORT_SETTING.setting());
+
+        // Authentication settings are node settings
+        settings.add(SharedSettings.AUTH_HOST_BASED_ENABLED_SETTING.setting());
+        settings.add(SharedSettings.AUTH_HOST_BASED_CONFIG_SETTING.setting());
 
         // also add CrateSettings
         for (CrateSetting crateSetting : CrateSettings.CRATE_CLUSTER_SETTINGS) {
