@@ -41,16 +41,16 @@ import java.util.Optional;
 public class TwoTableJoin implements QueriedRelation {
 
     private final QuerySpec querySpec;
-    private final RelationSource left;
-    private final RelationSource right;
+    private final QueriedRelation left;
+    private final QueriedRelation right;
     private final Optional<OrderBy> remainingOrderBy;
     private final Fields fields;
     private final QualifiedName name;
     private final JoinPair joinPair;
 
     public TwoTableJoin(QuerySpec querySpec,
-                        RelationSource left,
-                        RelationSource right,
+                        QueriedRelation left,
+                        QueriedRelation right,
                         Optional<OrderBy> remainingOrderBy,
                         JoinPair joinPair) {
         this.querySpec = querySpec;
@@ -58,8 +58,8 @@ public class TwoTableJoin implements QueriedRelation {
         this.right = right;
         this.name = QualifiedName.of(
             "join",
-            left.relation().getQualifiedName().toString(),
-            right.relation().getQualifiedName().toString());
+            left.getQualifiedName().toString(),
+            right.getQualifiedName().toString());
         this.remainingOrderBy = remainingOrderBy;
         this.joinPair = joinPair;
         fields = new Fields(querySpec.outputs().size());
@@ -69,9 +69,9 @@ public class TwoTableJoin implements QueriedRelation {
             Path fqPath;
             // prefix paths with origin relationName to keep them unique
             if (left.querySpec().outputs().contains(output)) {
-                fqPath = new ColumnIdent(left.relation().getQualifiedName().toString(), name);
+                fqPath = new ColumnIdent(left.getQualifiedName().toString(), name);
             } else {
-                fqPath = new ColumnIdent(right.relation().getQualifiedName().toString(), name);
+                fqPath = new ColumnIdent(right.getQualifiedName().toString(), name);
             }
             fields.add(fqPath, new Field(this, fqPath, output.valueType()));
         }
@@ -81,11 +81,11 @@ public class TwoTableJoin implements QueriedRelation {
         return remainingOrderBy;
     }
 
-    public RelationSource left() {
+    public QueriedRelation left() {
         return left;
     }
 
-    public RelationSource right() {
+    public QueriedRelation right() {
         return right;
     }
 

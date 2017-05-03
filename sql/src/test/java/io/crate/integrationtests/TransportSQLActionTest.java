@@ -48,7 +48,7 @@ import static com.carrotsearch.randomizedtesting.RandomizedTest.$;
 import static org.hamcrest.Matchers.*;
 import static org.hamcrest.core.Is.is;
 
-@ESIntegTestCase.ClusterScope(minNumDataNodes = 2)
+@ESIntegTestCase.ClusterScope(numDataNodes = 1, numClientNodes = 0, supportsDedicatedMasters = false)
 @UseJdbc
 public class TransportSQLActionTest extends SQLTransportIntegrationTest {
 
