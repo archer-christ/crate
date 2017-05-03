@@ -10,7 +10,8 @@ A collection of CrateDB best practices and tips for common scenarios.
    :maxdepth: 1
 
    data_import
-   cluster_upgrade
+   rolling_upgrade
+   full_restart_upgrade
    migrating_from_mysql
    migrating_from_mongodb
    ec2_setup

@@ -1,0 +1,134 @@
+.. _1.2.x_series:
+
+====================
+1.2.x Release Series
+====================
+
+Versions
+========
+
+.. toctree::
+    :maxdepth: 1
+
+    1.2.0
+
+Upgrade Guide
+=============
+
+.. NOTE::
+
+   To upgrade to the the 1.2.x release series, you must first be running the
+   latest version of the :ref:`1.1.x_series`.
+
+Daemon User
+-----------
+
+You can no longer run CrateDB as the superuser on Unix-like systems. You should
+create a new ``crate`` user for running the CrateDB daemon.
+
+
+Logging
+-------
+
+Your logging config file must be renamed::
+
+    sh$ mv logging.yml log4j2.properties
+
+System Properties
+-----------------
+
+If you have previously set or configured ``CRATE_JAVA_OPTS`` in your startup
+scripts or environment, you should remove this, as CrateDB can no longer be
+configured via this method.
+
+Configuration Changes
+---------------------
+
+Many configuration settings and files have been renamed or removed. You must
+review the release notes for :ref:`version_1.2.0` and update your setup as
+necessary.
+
+SQL Changes
+-----------
+
+Several breaking changes were made to CrateDB's SQL. This includes changes to
+time parsing, syntax changes, and new reserved keywords. You must review the
+release notes for :ref:`version_1.2.0` and update your client code as necessary.
+
+
+Bind Address
+------------
+
+The default bind address has been changed from `0.0.0.0` to the loopback
+address (meaning it will only be accessible on ``localhost``).
+
+If you bind to a network reachable IP address (e.g. you're configuring your
+cluster in a production or staging environment and not just for development
+purposes on your local machine) you must add the following line to your
+:ref:`configuration` file::
+
+    network.host: 0.0.0.0
+
+.. NOTE::
+
+   If you bind to a network reachable IP address, you must follow the
+   instructions in the next section.
+
+Elasticsearch Bootstrap Checks
+------------------------------
+
+If you are binding to a network reachable IP address, the Elasticsearch
+component used by CrateDB runs a number of `bootstrap checks`_ during startup.
+
+If you are binding to the loopback address, you can ignore this section.
+
+Heap Size
++++++++++
+
+If you have previously set or configured ``CRATE_MIN_MEM`` or ``CRATE_MAX_MEM``
+in your startup scripts or environment, you must remove both, and replace them
+with a single variable ``CRATE_HEAP_SIZE``. The ``CRATE_HEAP_SIZE`` variable
+sets both the minimum and maximum memory to allocate, and should be set to
+whatever your previous ``CRATE_MAX_MEM`` was set to.
+
+System Settings
++++++++++++++++
+
+You must manually configure some systems settings limits to ensure the smooth
+and efficient operation of Elasticsearch. For all the details why, check out the
+Elasticsearch `bootstrap checks`_ documentation.
+
+Edit ``/etc/security/limits.conf`` and configure these lines::
+
+    crate soft nofile unlimited
+    crate hard nofile unlimited
+
+    crate soft memlock unlimited
+    crate hard memlock unlimited
+
+    crate soft as 2048
+    crate hard as 2048
+
+If you are running on Linux, also configure::
+
+    crate soft nproc 2048
+    crate hard nproc 2048
+
+Here, ``crate`` is the user that runs the CrateDB daemon.
+
+Linux users should also edit ``/etc/sysctl.conf`` and configure::
+
+    vm.max_map_count = 262144
+
+If you are using one of the official packages, all of this is handled for you
+using a method suited to the packaging system.
+
+Garbage Collection
+++++++++++++++++++
+
+CrateDB uses `the CMS garbage collector`_ and this should not be changed or
+else Elasticsearch function may be seriously degraded.
+
+
+.. _bootstrap checks: https://www.elastic.co/guide/en/elasticsearch/reference/5.0/bootstrap-checks.html
+.. _the CMS garbage collector: https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/cms.html

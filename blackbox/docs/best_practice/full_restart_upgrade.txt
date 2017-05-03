@@ -1,0 +1,171 @@
+.. highlight:: sh
+
+.. _full_restart_upgrade:
+
+====================
+Full Restart Upgrade
+====================
+
+The preferred way to upgrade a running CrateDB cluster is via the
+:ref:`rolling_upgrade` method. But this is not always an option (for example,
+when you are upgrading from one minor version to the next).
+
+When a :ref:`rolling_upgrade` is not possible, a full restart upgrade must be
+done if you want to update CrateDB.
+
+.. NOTE::
+
+   A full restart upgrade cannot be done without downtime for your database.
+
+.. WARNING::
+
+   If you are using Docker, you must not run ``docker service update`` as this
+   performs a :ref:`rolling_upgrade`.
+
+   Instead you must remove the service and then recreate it.
+
+Upgrade Process
+===============
+
+.. WARNING::
+
+    Before upgrading, you should `back up your data`_.
+
+Stop Every Node
+---------------
+
+The first step is to shut down every CrateDB node in your cluster. By this, we
+mean, shut down every instance of the CrateDB daemon. The host operating system
+can be left running.
+
+Manually
+++++++++
+
+To stop the CrateDB daemon manually, run::
+
+    sh$ kill -USR2 `cat /path/to/crate.pid`
+
+Here, replace ``/path/to/crate.pid`` with the path to the PID file you created
+when starting the CrateDB daemon (see :ref:`cli`).
+
+System Packages
++++++++++++++++
+
+If you're using a Debian, Ubuntu, or Red Hat package, you can do::
+
+    sh$ sudo service crate stop
+
+If you're using the Arch Linux package, you can do::
+
+    sh$ sudo systemctl stop crate.service
+
+Upgrade Every Node
+------------------
+
+.. WARNING::
+
+   Make sure that every CrateDB daemon has been stopped before you continue. If
+   you are following this process and you attempt to upgrade your cluster while
+   an nodes are still running, you may experience data corruption or data loss.
+
+   If you want to keep your cluster running while you upgrade, you must follow
+   the :ref:`rolling_upgrade` process.
+
+Once every node has been stopped, you can upgrade CrateDB.
+
+Manually
+++++++++
+
+If you're running a manual install, you can just download the tarball
+corresponding to the version you want to download. For all available tarballs,
+check the `release directory`_.
+
+Let's run through an example.
+
+Let's say your existing install is at ``/srv/crate/1.0.6`` and looks like this:
+
+.. code-block:: txt
+
+    sh$ ls -l
+    total 32K
+    -rw-r--r--  1 nomi staff 5.7K Apr 24 13:58 CHANGES.txt
+    -rw-r--r--  1 nomi staff  12K Apr 24 13:56 LICENSE.txt
+    -rw-r--r--  1 nomi staff 4.1K Apr 24 13:56 NOTICE
+    -rw-r--r--  1 nomi staff 2.8K Apr 24 13:56 README.rst
+    drwxr-xr-x  8 nomi staff  272 Apr 24 13:58 bin
+    drwxr-xr-x  4 nomi staff  136 Apr 24 13:56 config
+    drwxr-xr-x  3 nomi staff  102 May  4 15:43 data
+    drwxr-xr-x 54 nomi staff 1.8K Apr 24 13:58 lib
+    drwxr-xr-x  3 nomi staff  102 May  4 15:43 logs
+    drwxr-xr-x  8 nomi staff  272 Apr 24 13:58 plugins
+
+If you're upgrading to 1.1.2, do something like this::
+
+    sh$ cd /srv/crate
+    sh$ wget https://cdn.crate.io/downloads/releases/crate-1.1.2.tar.gz
+    sh$ tar -xvzf crate-1.1.2.tar.gz
+    sh$ mv crate-1.1.2 1.1.2
+
+This downloads the 1.1.2 tarball to the ``/srv/crate`` directory, unpacks it,
+and moves it to ``/srv/crate/1.1.2``.
+
+Next, prepare the 1.1.2 install by moving the default ``config`` directory out
+of the way::
+
+    sh$ mv 1.1.2/config 1.1.2/config.orig
+
+Now, copy over the 1.0.6 ``config`` and ``data`` directories::
+
+    sh$ cp -R 1.0.6/config 1.1.2/config
+    sh$ cp -R 1.0.6/data 1.1.2/data
+
+If you're using custom plugins, you may also want to copy those over.
+
+Once this is done, you can switch from running ``1.0.6/bin/crate`` to running
+``1.1.2/bin/crate``.
+
+System Packages
++++++++++++++++
+
+If you're using a Debian or Ubuntu package, run::
+
+    sh$ sudo apt-get --only-upgrade install crate
+
+If you're running Red Hat, run::
+
+    sh$ yum update -y crate
+
+If you're using Arch Linux, you can download and install_ the latest `Arch Linux
+AUR package`_ via whatever method you prefer.
+
+Start Every Node
+-----------------
+
+Once you have upgraded every node on the cluster, you can start every node in
+the cluster.
+
+Manually
+++++++++
+
+From within the appropriate directory, run::
+
+    sh$ su - crate
+    sh$ bin/crate -d -p crate.pid
+
+This switches to the ``crate`` user, and then runs the ``bin/crate`` command.
+
+System Packages
++++++++++++++++
+
+If you’re using a Debian, Ubuntu, or Red Hat package, you can do::
+
+    sh$ sudo service crate start
+
+If you’re using the Arch Linux package, you can do::
+
+    sh$ sudo systemctl stop crate.service
+
+.. _Arch Linux AUR package: https://aur.archlinux.org/packages/crate/
+.. _back up your data: https://crate.io/a/backing-up-and-restoring-crate/
+.. _install: https://crate.io/docs/install/local/linux/
+.. _release directory: https://cdn.crate.io/downloads/releases/
