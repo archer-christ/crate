@@ -22,17 +22,25 @@
 package io.crate.planner.consumer;
 
 
+import io.crate.analyze.OrderBy;
 import io.crate.analyze.QuerySpec;
 import io.crate.analyze.relations.QueriedDocTable;
+import io.crate.analyze.symbol.InputColumn;
+import io.crate.analyze.symbol.Symbol;
 import io.crate.analyze.where.DocKeys;
+import io.crate.collections.Lists2;
 import io.crate.exceptions.VersionInvalidException;
+import io.crate.metadata.Routing;
 import io.crate.metadata.doc.DocTableInfo;
-import io.crate.planner.Limits;
-import io.crate.planner.NoopPlan;
-import io.crate.planner.Plan;
-import io.crate.planner.Planner;
-import io.crate.planner.node.dql.ESGet;
+import io.crate.planner.*;
+import io.crate.planner.distribution.DistributionInfo;
+import io.crate.planner.node.dql.PrimaryKeyLookupPhase;
+import io.crate.planner.node.dql.PrimaryKeyLookupPlan;
+import io.crate.planner.projection.Projection;
+import io.crate.planner.projection.TopNProjection;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 public class ESGetStatementPlanner {
@@ -49,19 +57,59 @@ public class ESGetStatementPlanner {
         if (docKeys.withVersions()){
             throw new VersionInvalidException();
         }
+
+        Optional<OrderBy> optOrderBy = querySpec.orderBy();
+        List<Symbol> qsOutputs = querySpec.outputs();
+        List<Symbol> toCollect = getToCollectSymbols(qsOutputs, optOrderBy);
         Limits limits = context.getLimits(querySpec);
         if (limits.hasLimit() && limits.finalLimit() == 0) {
             return new NoopPlan(context.jobId());
         }
         table.tableRelation().validateOrderBy(querySpec.orderBy());
-        return new ESGet(
+
+        Routing routing = context.allocateRouting(tableInfo, querySpec.where(), null);
+        PrimaryKeyLookupPhase primaryKeyLookupPhase = new PrimaryKeyLookupPhase(
+            context.jobId(),
             context.nextExecutionPhaseId(),
-            tableInfo,
-            querySpec.outputs(),
-            optKeys.get(),
-            querySpec.orderBy(),
+            "primary-key-lookup",
+            routing,
+            tableInfo.rowGranularity(),
+            toCollect,
+            topNOrEmptyProjections(toCollect, limits),
+            docKeys,
+            DistributionInfo.DEFAULT_BROADCAST
+        );
+
+        PrimaryKeyLookupPlan plan = new PrimaryKeyLookupPlan(
+            primaryKeyLookupPhase,
             limits.finalLimit(),
             limits.offset(),
-            context.jobId());
+            qsOutputs.size(),
+            limits.limitAndOffset(),
+            PositionalOrderBy.of(optOrderBy.orElse(null), toCollect)
+        );
+
+        return plan;
+    }
+
+    /**
+     * @return qsOutputs + symbols from orderBy which are not already within qsOutputs (if orderBy is present)
+     */
+    private static List<Symbol> getToCollectSymbols(List<Symbol> qsOutputs, Optional<OrderBy> optOrderBy) {
+        if (optOrderBy.isPresent()) {
+            return Lists2.concatUnique(qsOutputs, optOrderBy.get().orderBySymbols());
+        }
+        return qsOutputs;
+    }
+
+    private static List<Projection> topNOrEmptyProjections(List<Symbol> toCollect, Limits limits) {
+        if (limits.hasLimit()) {
+            return Collections.singletonList(new TopNProjection(
+                limits.limitAndOffset(),
+                0,
+                InputColumn.fromSymbols(toCollect)
+            ));
+        }
+        return Collections.emptyList();
     }
 }
