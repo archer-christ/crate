@@ -27,6 +27,7 @@ import org.elasticsearch.action.admin.indices.get.GetIndexRequest;
 import org.elasticsearch.action.admin.indices.open.OpenIndexRequest;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -53,6 +54,7 @@ public class OpenCloseTableIntegrationTest extends SQLTransportIntegrationTest {
         execute("create table t (i int)");
         ensureYellow();
 
+        // TODO: replace with `alter table t close` once supported
         String[] indices = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices();
         client().admin().indices().close(new CloseIndexRequest(indices[0])).actionGet();
 
@@ -63,10 +65,49 @@ public class OpenCloseTableIntegrationTest extends SQLTransportIntegrationTest {
     }
 
     @Test
+    public void testClosePartition() throws Exception {
+        execute("create table t (i int) partitioned by (i)");
+        ensureYellow();
+
+        execute("insert into t values (1)");
+        ensureYellow();
+        String partitionIdent = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices()[0];
+
+        execute("insert into t values (2), (3)");
+        ensureYellow();
+
+        execute("select closed from information_schema.table_partitions where table_name = 't'");
+
+        assertEquals(3, response.rowCount());
+        assertEquals(false, response.rows()[0][0]);
+        assertEquals(false, response.rows()[1][0]);
+        assertEquals(false, response.rows()[2][0]);
+
+        // TODO: replace with `alter table t close` once supported
+        client().admin().indices().close(new CloseIndexRequest(partitionIdent)).actionGet();
+
+        execute("select partition_ident, values from information_schema.table_partitions" +
+                " where table_name = 't' and closed = true");
+
+        assertEquals(1, response.rowCount());
+
+        HashMap values = (HashMap) response.rows()[0][1];
+        assertEquals(1, values.get("i"));
+        assertTrue(partitionIdent.endsWith((String) response.rows()[0][0]));
+
+        execute("select partition_ident from information_schema.table_partitions" +
+                " where table_name = 't' and closed = false");
+
+
+        assertEquals(2, response.rowCount());
+    }
+
+    @Test
     public void testReopenTable() throws Exception {
         execute("create table t (i int)");
         ensureYellow();
 
+        // TODO: replace with `alter table t close` once supported
         String[] indices = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices();
         client().admin().indices().close(new CloseIndexRequest(indices[0])).actionGet();
 
@@ -74,10 +115,53 @@ public class OpenCloseTableIntegrationTest extends SQLTransportIntegrationTest {
         assertEquals(1, response.rowCount());
         assertEquals(true, response.rows()[0][0]);
 
+        // TODO: replace with `alter table t partition (i = 1) close` once supported
         client().admin().indices().open(new OpenIndexRequest(indices[0])).actionGet();
 
         execute("select closed from information_schema.tables where table_name = 't'");
         assertEquals(1, response.rowCount());
         assertEquals(false, response.rows()[0][0]);
+    }
+
+    @Test
+    public void testReopenPartition() throws Exception {
+        execute("create table t (i int) partitioned by (i)");
+        ensureYellow();
+
+        execute("insert into t values (1)");
+        ensureYellow();
+        String partitionIdent = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices()[0];
+
+        execute("insert into t values (2), (3)");
+        ensureYellow();
+
+        execute("select closed from information_schema.table_partitions where table_name = 't'");
+
+        assertEquals(3, response.rowCount());
+        assertEquals(false, response.rows()[0][0]);
+        assertEquals(false, response.rows()[1][0]);
+        assertEquals(false, response.rows()[2][0]);
+
+        // TODO: replace with `alter table t partition (i = 1) close` once supported
+        client().admin().indices().close(new CloseIndexRequest(partitionIdent)).actionGet();
+
+        execute("select partition_ident, values from information_schema.table_partitions" +
+                " where table_name = 't' and closed = true");
+
+        assertEquals(1, response.rowCount());
+
+        HashMap values = (HashMap) response.rows()[0][1];
+        assertEquals(1, values.get("i"));
+        assertTrue(partitionIdent.endsWith((String) response.rows()[0][0]));
+
+        // TODO: replace with `alter table t partition (i = 1) open` once supported
+        client().admin().indices().open(new OpenIndexRequest(partitionIdent)).actionGet();
+
+        execute("select closed from information_schema.table_partitions");
+
+        assertEquals(3, response.rowCount());
+        assertEquals(false, response.rows()[0][0]);
+        assertEquals(false, response.rows()[1][0]);
+        assertEquals(false, response.rows()[2][0]);
     }
 }
