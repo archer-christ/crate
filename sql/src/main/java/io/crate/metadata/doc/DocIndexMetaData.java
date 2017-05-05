@@ -760,7 +760,7 @@ public class DocIndexMetaData {
         return versionUpgraded;
     }
 
-    public boolean closed() {
+    public boolean isClosed() {
         return isClosed(metaData);
     }
 

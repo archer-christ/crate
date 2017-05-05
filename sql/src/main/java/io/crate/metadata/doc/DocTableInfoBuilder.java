@@ -206,7 +206,7 @@ class DocTableInfoBuilder {
             md.getRoutingHashFunction(),
             md.versionCreated(),
             md.versionUpgraded(),
-            md.closed(),
+            md.isClosed(),
             md.supportedOperations());
     }
 }

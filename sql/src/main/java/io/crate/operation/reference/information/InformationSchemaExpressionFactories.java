@@ -423,7 +423,7 @@ public class InformationSchemaExpressionFactories {
                     @Override
                     public Boolean value() {
                         if (row instanceof ShardedTable) {
-                            return ((ShardedTable) row).closed();
+                            return ((ShardedTable) row).isClosed();
                         }
                         return null;
                     }

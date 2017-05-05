@@ -219,7 +219,7 @@ public class BlobTableInfo implements TableInfo, ShardedTable, StoredTable {
     }
 
     @Override
-    public boolean closed() {
+    public boolean isClosed() {
         return closed;
     }
 

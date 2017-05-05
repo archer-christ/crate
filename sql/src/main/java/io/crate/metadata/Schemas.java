@@ -92,7 +92,7 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
                 "%s is an alias and hence not dropable.", tableInfo.ident()));
         }
-        if (docTableInfo.closed()) {
+        if (docTableInfo.isClosed()) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
                 "The table %s is closed. Write, Drop or Alter operations (other than OPEN) are not supported",
                 tableInfo.ident()));
@@ -111,7 +111,7 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
                 "%s is an alias. Write, Drop or Alter operations are not supported", tableInfo.ident()));
         }
-        if (docTableInfo.closed()) {
+        if (docTableInfo.isClosed()) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
                 "The table %s is closed. Write, Drop or Alter operations (other than OPEN) are not supported",
                 tableInfo.ident()));
@@ -119,7 +119,7 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
         return docTableInfo;
     }
 
-    public DocTableInfo getOpenableOrClosableTable(TableIdent tableIdent) {
+    public DocTableInfo getAlterableTable(TableIdent tableIdent) {
         TableInfo tableInfo = getTableInfo(tableIdent);
         if (!(tableInfo instanceof DocTableInfo)) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,

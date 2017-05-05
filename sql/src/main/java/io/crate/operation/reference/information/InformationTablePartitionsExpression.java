@@ -85,7 +85,7 @@ abstract class InformationTablePartitionsExpression<T>
     public static class ClosedExpression extends InformationTablePartitionsExpression<Boolean> {
         @Override
         public Boolean value() {
-            return row.closed();
+            return row.isClosed();
         }
     }
 }

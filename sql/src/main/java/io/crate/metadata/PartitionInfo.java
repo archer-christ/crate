@@ -78,7 +78,7 @@ public class PartitionInfo implements StoredTable {
         return routingHashFunction;
     }
 
-    public boolean closed() {
+    public boolean isClosed() {
         return closed;
     }
 

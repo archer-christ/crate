@@ -363,7 +363,7 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
     }
 
     @Override
-    public boolean closed() {
+    public boolean isClosed() {
         return closed;
     }
 

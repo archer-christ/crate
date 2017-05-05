@@ -34,5 +34,5 @@ public interface ShardedTable {
 
     String routingHashFunction();
 
-    boolean closed();
+    boolean isClosed();
 }
