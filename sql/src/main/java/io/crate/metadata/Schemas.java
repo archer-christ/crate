@@ -121,7 +121,7 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
         TableInfo tableInfo = getTableInfo(tableIdent);
         if (!(tableInfo instanceof DocTableInfo)) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is read-only. Write, Drop or Alter operations are not supported", tableInfo.ident()));
+                "The table %s is read-only or an alias. Write, Drop or Alter operations are not supported", tableInfo.ident()));
         }
         DocTableInfo docTableInfo = (DocTableInfo) tableInfo;
         if (docTableInfo.isAlias() && !docTableInfo.isPartitioned()) {
