@@ -169,7 +169,7 @@ public class TableAliasIntegrationTest extends SQLTransportIntegrationTest {
     public void testDropTableWithTableAlias() throws Exception {
         String tableAlias = tableAliasSetup();
         expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage("doc.mytablealias is an alias and hence not dropable.");
+        expectedException.expectMessage("relation \"doc.mytablealias\" doesn't support or allow DROP operations");
         execute(String.format(Locale.ENGLISH, "drop table %s", tableAlias));
     }
 
@@ -177,7 +177,7 @@ public class TableAliasIntegrationTest extends SQLTransportIntegrationTest {
     public void testCopyFromWithTableAlias() throws Exception {
         String tableAlias = tableAliasSetup();
         expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage("doc.mytablealias is an alias. Write, Drop or Alter operations are not supported");
+        expectedException.expectMessage("The table doc.mytablealias is read-only or an alias. Write, Drop or Alter operations are not supported");
 
         execute(String.format(Locale.ENGLISH, "copy %s from '/tmp/file.json'", tableAlias));
 
@@ -187,7 +187,7 @@ public class TableAliasIntegrationTest extends SQLTransportIntegrationTest {
     public void testInsertWithTableAlias() throws Exception {
         String tableAlias = tableAliasSetup();
         expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage("doc.mytablealias is an alias. Write, Drop or Alter operations are not supported");
+        expectedException.expectMessage("The table doc.mytablealias is read-only or an alias. Write, Drop or Alter operations are not supported");
 
         execute(
             String.format(Locale.ENGLISH, "insert into %s (id, content) values (?, ?)", tableAlias),

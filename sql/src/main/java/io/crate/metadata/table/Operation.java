@@ -68,4 +68,8 @@ public enum Operation {
                 "relation \"%s\" doesn't support or allow %s operations", tableInfo.ident().fqn(), operation));
         }
     }
+
+    public static boolean isReadOnly(TableInfo tableInfo) {
+        return tableInfo.supportedOperations().equals(READ_ONLY);
+    }
 }

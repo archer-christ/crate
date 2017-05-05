@@ -22,6 +22,7 @@
 package io.crate.integrationtests;
 
 import io.crate.action.sql.SQLActionException;
+import io.crate.exceptions.UnsupportedFeatureException;
 import io.crate.testing.UseJdbc;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESIntegTestCase;
@@ -215,8 +216,9 @@ public class TableBlocksIntegrationTest extends SQLTransportIntegrationTest {
         execute("select settings['blocks']['read_only'] from information_schema.tables where table_name = 't1'");
         assertThat((Boolean) response.rows()[0][0], Is.is(true));
 
-        expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage("relation \"doc.t1\" doesn't support or allow INSERT operations");
+        expectedException.expect(UnsupportedFeatureException.class);
+        expectedException.expectMessage("The table doc.t1 is read-only or an alias. " +
+                                        "Write, Drop or Alter operations are not supported");
         execute("insert into t1 (id, name, date) values (?, ?, ?)",
             new Object[]{1, "Ford", 13959981214861L});
     }

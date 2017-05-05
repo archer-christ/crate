@@ -32,6 +32,7 @@ import io.crate.metadata.doc.DocSchemaInfoFactory;
 import io.crate.metadata.doc.DocTableInfo;
 import io.crate.metadata.information.InformationSchemaInfo;
 import io.crate.metadata.sys.SysSchemaInfo;
+import io.crate.metadata.table.Operation;
 import io.crate.metadata.table.SchemaInfo;
 import io.crate.metadata.table.TableInfo;
 import io.crate.operation.udf.UserDefinedFunctionMetaData;
@@ -83,10 +84,7 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
 
     public DocTableInfo getDroppableTable(TableIdent tableIdent) {
         TableInfo tableInfo = getTableInfo(tableIdent);
-        if (!(tableInfo instanceof DocTableInfo)) {
-            throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is not dropable.", tableInfo.ident()));
-        }
+        Operation.blockedRaiseException(tableInfo, Operation.DROP);
         DocTableInfo docTableInfo = (DocTableInfo) tableInfo;
         if (docTableInfo.isAlias() && !docTableInfo.isPartitioned() && !isOrphanedAlias(docTableInfo)) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
@@ -102,9 +100,9 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
 
     public DocTableInfo getWritableTable(TableIdent tableIdent) {
         TableInfo tableInfo = getTableInfo(tableIdent);
-        if (!(tableInfo instanceof DocTableInfo)) {
+        if (Operation.isReadOnly(tableInfo)) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is read-only. Write, Drop or Alter operations are not supported", tableInfo.ident()));
+                "The table %s is read-only or an alias. Write, Drop or Alter operations are not supported", tableInfo.ident()));
         }
         DocTableInfo docTableInfo = (DocTableInfo) tableInfo;
         if (docTableInfo.isAlias() && !docTableInfo.isPartitioned()) {

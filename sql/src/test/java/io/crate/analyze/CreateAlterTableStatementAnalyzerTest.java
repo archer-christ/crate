@@ -448,7 +448,8 @@ public class CreateAlterTableStatementAnalyzerTest extends CrateDummyClusterServ
     @Test
     public void testAlterSystemTable() throws Exception {
         expectedException.expect(UnsupportedOperationException.class);
-        expectedException.expectMessage("The table sys.shards is read-only. Write, Drop or Alter operations are not supported");
+        expectedException.expectMessage("The table sys.shards is read-only or an alias. " +
+                                        "Write, Drop or Alter operations are not supported");
         e.analyze("alter table sys.shards reset (number_of_replicas)");
     }
 
