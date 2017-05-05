@@ -156,14 +156,14 @@ public class PartitionedTableIntegrationTest extends SQLTransportIntegrationTest
         execute("create table t (n integer) partitioned by (n)");
         ensureYellow();
         execute("insert into t (n) values (1)");
-        ensureYellow();
 
         String[] indices = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices();
         client().admin().indices().close(new CloseIndexRequest(indices[0])).actionGet();
+        execute("insert into t (n) values (100)");
+        ensureYellow();
 
-        expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage(String.format("Unable to access the partition %s, it is closed", indices[0]));
-        execute("insert into t (n) values (1)");
+        execute("select count(*) from t");
+        assertEquals(0L, response.rows()[0][0]);
     }
 
     @Test
@@ -176,9 +176,8 @@ public class PartitionedTableIntegrationTest extends SQLTransportIntegrationTest
         String[] indices = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices();
         client().admin().indices().close(new CloseIndexRequest(indices[0])).actionGet();
 
-        expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage(String.format("Unable to access the partition %s, it is closed", indices[0]));
         execute("select count(*) from t");
+        assertEquals(0L, response.rows()[0][0]);
     }
 
     @Test

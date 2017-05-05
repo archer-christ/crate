@@ -139,7 +139,7 @@ public class DocIndexMetaData {
         }
         versionCreated = getVersionCreated(mappingMap);
         versionUpgraded = getVersionUpgraded(mappingMap);
-        closed = getClosed(mappingMap);
+        closed = metaData.getState().equals(IndexMetaData.State.CLOSE);
     }
 
     private static Map<String, Object> getMappingMap(IndexMetaData metaData) throws IOException {
@@ -183,8 +183,8 @@ public class DocIndexMetaData {
         versionMap.put(key.toString(), Version.toMap(version));
     }
 
-    public static boolean getClosed(Map<String, Object> mappingMap) {
-        return getNested(getNested(mappingMap, "_meta", null), SETTING_CLOSED, false);
+    public static boolean getClosed(IndexMetaData indexMetaData) {
+        return indexMetaData.getState().equals(IndexMetaData.State.CLOSE);
     }
 
     @SuppressWarnings("unchecked")
@@ -761,7 +761,7 @@ public class DocIndexMetaData {
     }
 
     public boolean closed() {
-        return getClosed(mappingMap);
+        return getClosed(metaData);
     }
 
     /**

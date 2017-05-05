@@ -96,7 +96,7 @@ public class InternalBlobTableInfoFactory implements BlobTableInfoFactory {
             DocIndexMetaData.getRoutingHashFunction(mappingMap),
             DocIndexMetaData.getVersionCreated(mappingMap),
             DocIndexMetaData.getVersionUpgraded(mappingMap),
-            DocIndexMetaData.getClosed(mappingMap));
+            DocIndexMetaData.getClosed(indexMetaData));
     }
 
     private BytesRef blobsPath(Settings indexMetaDataSettings) {
