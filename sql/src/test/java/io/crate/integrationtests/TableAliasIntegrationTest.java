@@ -177,7 +177,7 @@ public class TableAliasIntegrationTest extends SQLTransportIntegrationTest {
     public void testCopyFromWithTableAlias() throws Exception {
         String tableAlias = tableAliasSetup();
         expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage("The table doc.mytablealias is read-only or an alias. Write, Drop or Alter operations are not supported");
+        expectedException.expectMessage("The table doc.mytablealias is read-only. Only READ operations are supported.");
 
         execute(String.format(Locale.ENGLISH, "copy %s from '/tmp/file.json'", tableAlias));
 
@@ -187,7 +187,7 @@ public class TableAliasIntegrationTest extends SQLTransportIntegrationTest {
     public void testInsertWithTableAlias() throws Exception {
         String tableAlias = tableAliasSetup();
         expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage("The table doc.mytablealias is read-only or an alias. Write, Drop or Alter operations are not supported");
+        expectedException.expectMessage("The table doc.mytablealias is read-only. Only READ operations are supported.");
 
         execute(
             String.format(Locale.ENGLISH, "insert into %s (id, content) values (?, ?)", tableAlias),

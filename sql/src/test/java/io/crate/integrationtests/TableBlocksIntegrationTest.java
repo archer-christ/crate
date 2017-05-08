@@ -217,8 +217,8 @@ public class TableBlocksIntegrationTest extends SQLTransportIntegrationTest {
         assertThat((Boolean) response.rows()[0][0], Is.is(true));
 
         expectedException.expect(SQLActionException.class);
-        expectedException.expectMessage("The table doc.t1 is read-only or an alias. " +
-                                        "Write, Drop or Alter operations are not supported");
+        expectedException.expectMessage("The table doc.t1 is read-only. " +
+                                        "Only READ operations are supported.");
         execute("insert into t1 (id, name, date) values (?, ?, ?)",
             new Object[]{1, "Ford", 13959981214861L});
     }

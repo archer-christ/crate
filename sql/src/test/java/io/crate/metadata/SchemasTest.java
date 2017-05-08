@@ -78,8 +78,8 @@ public class SchemasTest {
     @Test
     public void testSystemSchemaIsNotWritable() throws Exception {
         expectedException.expect(UnsupportedOperationException.class);
-        expectedException.expectMessage("The table foo.bar is read-only or an alias. " +
-                                        "Write, Drop or Alter operations are not supported");
+        expectedException.expectMessage("The table foo.bar is read-only. " +
+                                        "Only READ operations are supported.");
 
         TableIdent tableIdent = new TableIdent("foo", "bar");
         SchemaInfo schemaInfo = mock(SchemaInfo.class);
@@ -96,7 +96,7 @@ public class SchemasTest {
     @Test
     public void testTableAliasIsNotWritable() throws Exception {
         expectedException.expect(UnsupportedOperationException.class);
-        expectedException.expectMessage("foo.bar is an alias. Write, Drop or Alter operations are not supported");
+        expectedException.expectMessage("foo.bar is an alias. Only READ operations are supported.");
 
         TableIdent tableIdent = new TableIdent("foo", "bar");
         SchemaInfo schemaInfo = mock(SchemaInfo.class);
