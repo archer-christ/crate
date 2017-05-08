@@ -44,7 +44,7 @@ public class AlterTableOpenCloseAnalyzedStatement implements DDLStatement {
         this.openTable = openTable;
     }
 
-    public DocTableInfo table() {
+    public DocTableInfo tableInfo() {
         return tableInfo;
     }
 

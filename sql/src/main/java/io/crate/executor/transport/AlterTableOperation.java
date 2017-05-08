@@ -110,22 +110,24 @@ public class AlterTableOperation {
 
     public CompletableFuture<Long> executeAlterTableOpenClose(final AlterTableOpenCloseAnalyzedStatement analysis) {
         List<CompletableFuture<Long>> results = new ArrayList<>(2);
-        DocTableInfo table = analysis.table();
+        DocTableInfo table = analysis.tableInfo();
+
+        // TODO: check whether isClosed is true and the operation is to close the table. 
 
         String[] concreteIndices;
         Optional<PartitionName> partitionName = analysis.partitionName();
         if (partitionName.isPresent()) {
             concreteIndices = new String[]{partitionName.get().asIndexName()};
         } else {
-            concreteIndices = analysis.table().concreteIndices();
-            if(table.isPartitioned()) {
+            concreteIndices = analysis.tableInfo().concreteIndices();
+            if (table.isPartitioned()) {
                 HashMap<String, Object> metaMap = new HashMap<>();
                 HashMap<String, Object> innerMap = new HashMap<>();
                 innerMap.put("closed", true);
                 metaMap.put("_meta", innerMap);
                 if (analysis.openTable()) {
                     //Remove the mapping from the template.
-                    results.add(updateTemplate(new HashMap<>(), metaMap, Settings.EMPTY, table.ident()));
+                    results.add(updateTemplate(Collections.EMPTY_MAP, metaMap, Settings.EMPTY, table.ident()));
                 } else {
                     //Otherwise, add the mapping to the template.
                     results.add(updateTemplate(metaMap, Settings.EMPTY, table.ident()));
@@ -252,7 +254,7 @@ public class AlterTableOperation {
     private CompletableFuture<Long> updateTemplate(Map<String, Object> newMappings,
                                                    Settings newSettings,
                                                    TableIdent tableIdent) {
-        return updateTemplate(newMappings, new HashMap<>(), newSettings, tableIdent);
+        return updateTemplate(newMappings, Collections.EMPTY_MAP, newSettings, tableIdent);
     }
 
     private CompletableFuture<Long> updateTemplate(Map<String, Object> newMappings,
@@ -270,7 +272,6 @@ public class AlterTableOperation {
         Map<String, Object> mapping = mergeTemplateMapping(indexTemplateMetaData, newMappings);
 
         // remove mappings
-
         mapping = removeFromMapping(mapping, mappingsToRemove);
 
         // merge settings
