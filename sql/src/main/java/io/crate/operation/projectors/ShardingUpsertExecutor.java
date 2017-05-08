@@ -102,7 +102,7 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
     private final Map<String, List<PendingRequest<TItem>>> pendingRequestsByIndex = new HashMap<>();
     private final BitSet responses = new BitSet();
     private final NodeJobsCounter nodeJobsCounter;
-    private volatile boolean collectionEnabled = true;
+    private volatile boolean collectingEnabled = true;
 
     private int location = -1;
     private List<CompletableFuture<BitSet>> batchExecutionFutures = new ArrayList<>();
@@ -153,7 +153,7 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
     private CompletionStage<BitSet> consumeIterator(BatchIterator batchIterator) {
         Row row = RowBridging.toRow(batchIterator.rowData());
         try {
-            while (collectionEnabled && batchIterator.moveNext()) {
+            while (collectingEnabled && batchIterator.moveNext()) {
                 if (idxWithinBatch == bulkSize) {
                     idxWithinBatch = 0;
                     batchExecutionFutures.add(execute(false));
@@ -161,11 +161,11 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
                 onRow(row);
             }
 
-            if (collectionEnabled == false) {
+            if (collectingEnabled == false) {
                 // resume iterator consumption when the in-progress batches are done
                 return CompletableFutures.allAsList(batchExecutionFutures).
                     thenCompose(r -> {
-                        collectionEnabled = true;
+                        collectingEnabled = true;
                         return consumeIterator(batchIterator);
                     });
             }
