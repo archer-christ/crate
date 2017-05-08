@@ -37,44 +37,9 @@ import static org.hamcrest.Matchers.is;
 public class OpenCloseTableIntegrationTest extends SQLTransportIntegrationTest {
 
     @Test
-    public void testOpenTable() throws Exception {
+    public void testOpenCloseTable() throws Exception {
         execute("create table t (i int)");
         ensureYellow();
-        String[] indices = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices();
-
-        execute("alter table t open");
-
-        execute("select closed from information_schema.tables where table_name = 't'");
-
-        IndexMetaData idx = client().admin().cluster().prepareState().execute().actionGet().getState().metaData().indices().get(indices[0]);
-
-        assertEquals(1, response.rowCount());
-        assertEquals(false, response.rows()[0][0]);
-        assertEquals(IndexMetaData.State.OPEN, idx.getState());
-    }
-
-    @Test
-    public void testCloseTable() throws Exception {
-        execute("create table t (i int)");
-        ensureYellow();
-        String[] indices = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices();
-
-        execute("alter table t close");
-
-        execute("select closed from information_schema.tables where table_name = 't'");
-
-        IndexMetaData idx = client().admin().cluster().prepareState().execute().actionGet().getState().metaData().indices().get(indices[0]);
-
-        assertEquals(1, response.rowCount());
-        assertEquals(true, response.rows()[0][0]);
-        assertEquals(IndexMetaData.State.CLOSE, idx.getState());
-    }
-
-    @Test
-    public void testReopenTable() throws Exception {
-        execute("create table t (i int)");
-        ensureYellow();
-        String[] indices = client().admin().indices().getIndex(new GetIndexRequest()).actionGet().getIndices();
 
         execute("alter table t close");
 
@@ -82,18 +47,19 @@ public class OpenCloseTableIntegrationTest extends SQLTransportIntegrationTest {
         assertEquals(1, response.rowCount());
         assertEquals(true, response.rows()[0][0]);
 
-        IndexMetaData idx = client().admin().cluster().prepareState().execute().actionGet().getState().metaData().indices().get(indices[0]);
-        assertEquals(IndexMetaData.State.CLOSE, idx.getState());
+        IndexMetaData indexMetaData = client().admin().cluster().prepareState().execute().actionGet().getState().metaData()
+            .indices().get("doc.t");
+        assertEquals(IndexMetaData.State.CLOSE, indexMetaData.getState());
 
         execute("alter table t open");
 
-        idx = client().admin().cluster().prepareState().execute().actionGet().getState().metaData().indices().get(indices[0]);
-
+        indexMetaData = client().admin().cluster().prepareState().execute().actionGet().getState().metaData()
+            .indices().get("doc.t");
 
         execute("select closed from information_schema.tables where table_name = 't'");
         assertEquals(1, response.rowCount());
         assertEquals(false, response.rows()[0][0]);
-        assertEquals(IndexMetaData.State.OPEN, idx.getState());
+        assertEquals(IndexMetaData.State.OPEN, indexMetaData.getState());
     }
 
 

@@ -250,8 +250,7 @@ public class Analyzer {
 
         @Override
         public AnalyzedStatement visitAlterTableOpenClose(AlterTableOpenClose node, Analysis context) {
-            return alterTableOpenCloseAnalyzer.analyze(
-                node, context.parameterContext().parameters(), context.sessionContext().defaultSchema());
+            return alterTableOpenCloseAnalyzer.analyze(node, context.sessionContext().defaultSchema());
         }
 
         @Override

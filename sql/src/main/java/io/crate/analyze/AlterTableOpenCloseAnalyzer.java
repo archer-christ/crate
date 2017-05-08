@@ -43,28 +43,13 @@ class AlterTableOpenCloseAnalyzer {
         this.schemas = schemas;
     }
 
-    public AlterTableOpenCloseAnalyzedStatement analyze(AlterTableOpenClose node, Row parameters, String defaultSchema) {
+    public AlterTableOpenCloseAnalyzedStatement analyze(AlterTableOpenClose node, String defaultSchema) {
         Table table = node.table();
         DocTableInfo tableInfo = schemas.getOpenableOrClosableTable(TableIdent.of(table, defaultSchema));
-        PartitionName partitionName = getPartitionName(table.partitionProperties(), tableInfo, parameters);
-        return new AlterTableOpenCloseAnalyzedStatement(tableInfo, partitionName, node.openTable(), table.excludePartitions());
-    }
-
-    @Nullable
-    private static PartitionName getPartitionName(List<Assignment> partitionsProperties,
-                                                  DocTableInfo tableInfo,
-                                                  Row parameters) {
-        if (partitionsProperties.isEmpty()) {
-            return null;
+        PartitionName partitionName = null;
+        if (tableInfo.isPartitioned()) {
+            partitionName = AlterTableAnalyzer.getPartitionName(table.partitionProperties(), tableInfo, null);
         }
-        PartitionName partitionName = PartitionPropertiesAnalyzer.toPartitionName(
-            tableInfo,
-            partitionsProperties,
-            parameters
-        );
-        if (tableInfo.partitions().contains(partitionName) == false) {
-            throw new IllegalArgumentException("Referenced partition \"" + partitionName + "\" does not exist.");
-        }
-        return partitionName;
+        return new AlterTableOpenCloseAnalyzedStatement(tableInfo, partitionName, node.openTable());
     }
 }

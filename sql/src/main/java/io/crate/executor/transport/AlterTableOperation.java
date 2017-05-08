@@ -111,42 +111,31 @@ public class AlterTableOperation {
     public CompletableFuture<Long> executeAlterTableOpenClose(final AlterTableOpenCloseAnalyzedStatement analysis) {
         List<CompletableFuture<Long>> results = new ArrayList<>(2);
         DocTableInfo table = analysis.table();
-        if (table.isPartitioned()) {
-            Optional<PartitionName> partitionName = analysis.partitionName();
-            if (partitionName.isPresent()) {
-                String idx = partitionName.get().asIndexName();
 
-                if (analysis.openTable()) {
-                    results.add(openTable(idx));
-                } else {
-                    results.add(closeTable(idx));
-                }
-            } else {
+        String[] concreteIndices;
+        Optional<PartitionName> partitionName = analysis.partitionName();
+        if (partitionName.isPresent()) {
+            concreteIndices = new String[]{partitionName.get().asIndexName()};
+        } else {
+            concreteIndices = analysis.table().concreteIndices();
+            if(table.isPartitioned()) {
                 HashMap<String, Object> metaMap = new HashMap<>();
                 metaMap.put("_meta", new HashMap(){{put("closed", true);}});
-
                 if (analysis.openTable()) {
-                    // Remove the mapping from the template.
+                    //Remove the mapping from the template.
                     results.add(updateTemplate(new HashMap<>(), metaMap, Settings.EMPTY, table.ident()));
                 } else {
-                    // Otherwise, add the mapping.
+                    //Otherwise, add the mapping to the template.
                     results.add(updateTemplate(metaMap, Settings.EMPTY, table.ident()));
                 }
-
-                if (!analysis.excludePartitions() && analysis.table().partitions().size() > 0) {
-                    String[] indices = Stream.of(table.concreteIndices()).toArray(String[]::new);
-                    if (analysis.openTable()) {
-                        results.add(openTable(indices));
-                    } else {
-                        results.add(closeTable(indices));
-                    }
-                }
             }
-        } else {
+        }
+
+        if (concreteIndices.length > 0) {
             if (analysis.openTable()) {
-                results.add(openTable(table.ident().indexName()));
+                results.add(openTable(concreteIndices));
             } else {
-                results.add(closeTable(table.ident().indexName()));
+                results.add(closeTable(concreteIndices));
             }
         }
 

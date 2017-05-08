@@ -116,7 +116,8 @@ public class DDLStatementDispatcher {
             return alterTableOperation.executeAlterTableAddColumn(analysis);
         }
 
-        public CompletableFuture<Long> visitAlterTableOpenCloseStatement(AlterTableOpenCloseAnalyzedStatement analysis, Row parameters) {
+        public CompletableFuture<Long> visitAlterTableOpenCloseStatement(AlterTableOpenCloseAnalyzedStatement analysis,
+                                                                         Row parameters) {
             return alterTableOperation.executeAlterTableOpenClose(analysis);
         }
 
