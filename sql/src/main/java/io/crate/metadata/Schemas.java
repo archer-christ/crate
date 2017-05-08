@@ -92,7 +92,7 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
         }
         if (docTableInfo.isClosed()) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is closed. Write, Drop or Alter operations (other than OPEN) are not supported",
+                "The table %s is closed. No operation beside opening it using ALTER is supported.",
                 tableInfo.ident()));
         }
         return docTableInfo;
@@ -111,7 +111,7 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
         }
         if (docTableInfo.isClosed()) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is closed. Write, Drop or Alter operations (other than OPEN) are not supported",
+                "The table %s is closed. No operation beside opening it using ALTER is supported.",
                 tableInfo.ident()));
         }
         return docTableInfo;
