@@ -119,6 +119,7 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
 
     public DocTableInfo getAlterableTable(TableIdent tableIdent) {
         TableInfo tableInfo = getTableInfo(tableIdent);
+        // If the table is not an instance of doctableinfo, then it is a system table.
         if (!(tableInfo instanceof DocTableInfo)) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
                 "The table %s is read-only or an alias. Write, Drop or Alter operations are not supported", tableInfo.ident()));

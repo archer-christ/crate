@@ -45,15 +45,17 @@ public class OperationTest extends CrateUnitTest {
 
         assertThat(Operation.buildFromIndexSettings(Settings.builder()
                 .put(IndexMetaData.SETTING_BLOCKS_READ, true).build()),
-            containsInAnyOrder(Operation.INSERT, Operation.UPDATE, Operation.DELETE, Operation.ALTER, Operation.DROP));
+            containsInAnyOrder(Operation.INSERT, Operation.UPDATE, Operation.DELETE, Operation.ALTER, Operation.DROP,
+                Operation.ALTER_OPEN_CLOSE));
 
         assertThat(Operation.buildFromIndexSettings(Settings.builder()
                 .put(IndexMetaData.SETTING_BLOCKS_WRITE, true).build()),
-            containsInAnyOrder(Operation.READ, Operation.ALTER));
+            containsInAnyOrder(Operation.READ, Operation.ALTER, Operation.ALTER_OPEN_CLOSE));
 
         assertThat(Operation.buildFromIndexSettings(Settings.builder()
                 .put(IndexMetaData.SETTING_BLOCKS_METADATA, true).build()),
-            containsInAnyOrder(Operation.READ, Operation.INSERT, Operation.UPDATE, Operation.DELETE));
+            containsInAnyOrder(Operation.READ, Operation.INSERT, Operation.UPDATE, Operation.DELETE,
+                Operation.ALTER_OPEN_CLOSE));
     }
 
     @Test
@@ -61,16 +63,16 @@ public class OperationTest extends CrateUnitTest {
         assertThat(Operation.buildFromIndexSettings(Settings.builder()
                 .put(IndexMetaData.SETTING_BLOCKS_READ, true)
                 .put(IndexMetaData.SETTING_BLOCKS_WRITE, true).build()),
-            containsInAnyOrder(Operation.ALTER));
+            containsInAnyOrder(Operation.ALTER, Operation.ALTER_OPEN_CLOSE));
 
         assertThat(Operation.buildFromIndexSettings(Settings.builder()
                 .put(IndexMetaData.SETTING_BLOCKS_WRITE, true)
                 .put(IndexMetaData.SETTING_BLOCKS_METADATA, true).build()),
-            containsInAnyOrder(Operation.READ));
+            containsInAnyOrder(Operation.READ, Operation.ALTER_OPEN_CLOSE));
 
         assertThat(Operation.buildFromIndexSettings(Settings.builder()
                 .put(IndexMetaData.SETTING_BLOCKS_READ, true)
                 .put(IndexMetaData.SETTING_BLOCKS_METADATA, true).build()),
-            containsInAnyOrder(Operation.INSERT, Operation.UPDATE, Operation.DELETE));
+            containsInAnyOrder(Operation.INSERT, Operation.UPDATE, Operation.DELETE, Operation.ALTER_OPEN_CLOSE));
     }
 }
