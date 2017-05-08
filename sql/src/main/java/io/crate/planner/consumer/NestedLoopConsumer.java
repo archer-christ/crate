@@ -29,6 +29,7 @@ import io.crate.analyze.relations.JoinPair;
 import io.crate.analyze.relations.QueriedDocTable;
 import io.crate.analyze.relations.QueriedRelation;
 import io.crate.analyze.symbol.*;
+import io.crate.collections.Lists2;
 import io.crate.metadata.Functions;
 import io.crate.metadata.TableIdent;
 import io.crate.operation.projectors.TopN;
@@ -77,11 +78,9 @@ class NestedLoopConsumer implements Consumer {
         public Plan visitTwoTableJoin(TwoTableJoin statement, ConsumerContext context) {
             QuerySpec querySpec = statement.querySpec();
 
-            List<Symbol> nlOutputs = new ArrayList<>();
             QueriedRelation left = statement.left();
             QueriedRelation right = statement.right();
-            nlOutputs.addAll(statement.left().querySpec().outputs());
-            nlOutputs.addAll(statement.right().querySpec().outputs());
+            List<Symbol> nlOutputs = Lists2.concat(left.fields(), right.fields());
 
             // for nested loops we are fine to remove pushed down orders
             OrderBy orderByBeforeSplit = querySpec.orderBy().orElse(null);
@@ -119,6 +118,13 @@ class NestedLoopConsumer implements Consumer {
 
             if (!filterNeeded && joinCondition == null && querySpec.limit().isPresent()) {
                 context.requiredPageSize(limits.limitAndOffset());
+            }
+
+            if (left instanceof QueriedTableRelation) {
+                ((QueriedTableRelation) left).normalize(functions, context.plannerContext().transactionContext());
+            }
+            if (right instanceof QueriedTableRelation) {
+                ((QueriedTableRelation) right).normalize(functions, context.plannerContext().transactionContext());
             }
 
             context.setFetchMode(FetchMode.NEVER);

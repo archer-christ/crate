@@ -30,6 +30,7 @@ import io.crate.analyze.symbol.Symbol;
 import io.crate.analyze.symbol.format.SymbolPrinter;
 import io.crate.exceptions.ColumnUnknownException;
 import io.crate.metadata.ColumnIdent;
+import io.crate.metadata.OutputName;
 import io.crate.metadata.Path;
 import io.crate.metadata.table.Operation;
 import io.crate.sql.tree.QualifiedName;
@@ -68,10 +69,14 @@ public class TwoTableJoin implements QueriedRelation {
             String name = SymbolPrinter.INSTANCE.printSimple(output);
             Path fqPath;
             // prefix paths with origin relationName to keep them unique
-            if (left.querySpec().outputs().contains(output)) {
-                fqPath = new ColumnIdent(left.getQualifiedName().toString(), name);
+            if (output instanceof Field) {
+                if (left.fields().contains(output)) {
+                    fqPath = new ColumnIdent(left.getQualifiedName().toString(), name);
+                } else {
+                    fqPath = new ColumnIdent(right.getQualifiedName().toString(), name);
+                }
             } else {
-                fqPath = new ColumnIdent(right.getQualifiedName().toString(), name);
+                fqPath = new OutputName(name);
             }
             fields.add(fqPath, new Field(this, fqPath, output.valueType()));
         }

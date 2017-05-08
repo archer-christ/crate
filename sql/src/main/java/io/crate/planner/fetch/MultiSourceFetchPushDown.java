@@ -23,6 +23,7 @@
 package io.crate.planner.fetch;
 
 import io.crate.analyze.MultiSourceSelect;
+import io.crate.analyze.QuerySpec;
 import io.crate.analyze.relations.AnalyzedRelation;
 import io.crate.analyze.relations.DocTableRelation;
 import io.crate.analyze.relations.QueriedDocTable;
@@ -36,8 +37,10 @@ import io.crate.metadata.doc.DocSysColumns;
 import io.crate.metadata.doc.DocTableInfo;
 import io.crate.planner.node.fetch.FetchSource;
 import io.crate.sql.tree.QualifiedName;
+import org.elasticsearch.common.collect.Tuple;
 
 import java.util.*;
+import java.util.function.Function;
 
 class MultiSourceFetchPushDown {
 
@@ -61,7 +64,6 @@ class MultiSourceFetchPushDown {
 
     void process() {
         remainingOutputs = statement.querySpec().outputs();
-        statement.querySpec().outputs(new ArrayList<>());
 
         HashMap<Symbol, FetchReference> fetchRefByOriginalSymbol = new HashMap<>();
         ArrayList<Symbol> mssOutputs = new ArrayList<>(
@@ -70,13 +72,13 @@ class MultiSourceFetchPushDown {
         for (Map.Entry<QualifiedName, AnalyzedRelation> entry : statement.sources().entrySet()) {
             QueriedRelation relation = (QueriedRelation) entry.getValue();
             if (!(relation instanceof QueriedDocTable)) {
-                mssOutputs.addAll(relation.querySpec().outputs());
+                mssOutputs.addAll(relation.fields());
                 continue;
             }
 
             DocTableRelation rel = ((QueriedDocTable) relation).tableRelation();
             DocTableInfo tableInfo = rel.tableInfo();
-            HashSet<Field> canBeFetched = forSubRelation(statement.canBeFetched(), relation, rel);
+            FetchFields canBeFetched = filterByRelation(statement.canBeFetched(), relation, rel);
             if (!canBeFetched.isEmpty()) {
 
                 Field fetchIdColumn = rel.getField(DocSysColumns.FETCHID);
@@ -87,21 +89,27 @@ class MultiSourceFetchPushDown {
                     relation.querySpec().outputs().size() - canBeFetched.size() + 1);
                 qtOutputs.add(fetchIdColumn);
 
-                for (Symbol output : relation.querySpec().outputs()) {
+                for (int i = 0; i < relation.querySpec().outputs().size(); i++) {
+                    Symbol output = relation.querySpec().outputs().get(i);
                     if (!(output instanceof Field) || !canBeFetched.contains(output)) {
                         qtOutputs.add(output);
-                        mssOutputs.add(output);
+                        mssOutputs.add(relation.fields().get(i));
                     }
                 }
-                for (Field field : canBeFetched) {
+                for (Tuple<Field, Field> parentAndChild : canBeFetched.parentAndChildren()) {
+                    Field parent = parentAndChild.v1();
+                    Field child = parentAndChild.v2();
                     FetchReference fr = new FetchReference(
-                        fetchIdInput, DocReferences.toSourceLookup(rel.resolveField(field)));
+                        fetchIdInput, DocReferences.toSourceLookup(rel.resolveField(child)));
                     allocateFetchedReference(fr, tableInfo.partitionedByColumns());
-                    fetchRefByOriginalSymbol.put(field, fr);
+                    fetchRefByOriginalSymbol.put(parent, fr);
                 }
-                relation.querySpec().outputs(qtOutputs);
+                QuerySpec querySpec = relation.querySpec().copyAndReplace(Function.identity());
+                querySpec.outputs(qtOutputs);
+                QueriedDocTable newRelation = new QueriedDocTable(rel, querySpec);
+                entry.setValue(newRelation);
             } else {
-                mssOutputs.addAll(relation.querySpec().outputs());
+                mssOutputs.addAll(relation.fields());
             }
         }
 
@@ -112,14 +120,14 @@ class MultiSourceFetchPushDown {
         }
     }
 
-    private static HashSet<Field> forSubRelation(Set<Field> fields, AnalyzedRelation rel, DocTableRelation tableRelation) {
-        HashSet<Field> filteredFields = new HashSet<>();
+    private static FetchFields filterByRelation(Set<Field> fields, AnalyzedRelation rel, DocTableRelation tableRelation) {
+        FetchFields fetchFields = new FetchFields(tableRelation);
         for (Field field : fields) {
             if (field.relation() == rel) {
-                filteredFields.add(tableRelation.getField(field.path()));
+                fetchFields.add(field);
             }
         }
-        return filteredFields;
+        return fetchFields;
     }
 
     private void allocateFetchedReference(FetchReference fr, List<Reference> partitionedByColumns) {
@@ -131,6 +139,58 @@ class MultiSourceFetchPushDown {
         fs.fetchIdCols().add(fr.fetchId());
         if (fr.ref().granularity() == RowGranularity.DOC) {
             fs.references().add(fr.ref());
+        }
+    }
+
+    private final static class FetchFields {
+
+        private final DocTableRelation tableRelation;
+        private Set<Field> canBeFetchedParent = new HashSet<>();
+        private Set<Field> canBeFetchedChild = new HashSet<>();
+
+        FetchFields(DocTableRelation tableRelation) {
+            this.tableRelation = tableRelation;
+        }
+
+        void add(Field field) {
+            canBeFetchedParent.add(field);
+            canBeFetchedChild.add(tableRelation.getField(field.path()));
+        }
+
+        boolean isEmpty() {
+            return canBeFetchedChild.isEmpty();
+        }
+
+        int size() {
+            return canBeFetchedChild.size();
+        }
+
+        boolean contains(Symbol output) {
+            return output instanceof Field && canBeFetchedChild.contains(output);
+        }
+
+        Iterable<Tuple<Field, Field>> parentAndChildren() {
+            return () -> new Iterator<Tuple<Field, Field>>() {
+
+                private final Iterator<Field> children = canBeFetchedChild.iterator();
+                private final Iterator<Field> parents = canBeFetchedParent.iterator();
+
+                @Override
+                public boolean hasNext() {
+                    return children.hasNext();
+                }
+
+                @Override
+                public Tuple<Field, Field> next() {
+                    if (!children.hasNext()) {
+                        throw new NoSuchElementException("Iterator is exhausted");
+                    }
+                    Field child = children.next();
+                    Field parent = parents.next();
+
+                    return new Tuple<>(parent, child);
+                }
+            };
         }
     }
 }

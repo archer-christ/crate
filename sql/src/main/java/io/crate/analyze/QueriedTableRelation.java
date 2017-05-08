@@ -25,6 +25,7 @@ import io.crate.analyze.relations.AbstractTableRelation;
 import io.crate.analyze.relations.QueriedRelation;
 import io.crate.analyze.symbol.Field;
 import io.crate.analyze.symbol.Symbol;
+import io.crate.analyze.symbol.format.SymbolPrinter;
 import io.crate.metadata.*;
 import io.crate.metadata.table.Operation;
 import io.crate.sql.tree.QualifiedName;
@@ -56,8 +57,16 @@ public abstract class QueriedTableRelation<TR extends AbstractTableRelation> imp
         this.querySpec = querySpec;
         this.fields = new Fields(querySpec.outputs().size());
         for (int i = 0; i < querySpec.outputs().size(); i++) {
-            ColumnIndex columnIndex = new ColumnIndex(i);
-            fields.add(columnIndex, new Field(this, columnIndex, querySpec.outputs().get(i).valueType()));
+            Symbol output = querySpec.outputs().get(i);
+            Path path;
+            if (output instanceof Field) {
+                path = ((Field) output).path();
+            } else if (output instanceof Reference) {
+                path = ((Reference) output).ident().columnIdent();
+            } else {
+                path = new OutputName(SymbolPrinter.INSTANCE.printSimple(output));
+            }
+            fields.add(path, new Field(this, path, output.valueType()));
         }
     }
 
@@ -102,5 +111,20 @@ public abstract class QueriedTableRelation<TR extends AbstractTableRelation> imp
     @Override
     public String toString() {
         return "QueriedTable{" + tableRelation + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        QueriedTableRelation<?> that = (QueriedTableRelation<?>) o;
+
+        return tableRelation.equals(that.tableRelation);
+    }
+
+    @Override
+    public int hashCode() {
+        return tableRelation.hashCode();
     }
 }
