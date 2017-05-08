@@ -23,7 +23,6 @@
 package io.crate.operation.projectors;
 
 import com.carrotsearch.hppc.IntArrayList;
-import com.google.common.collect.Iterables;
 import io.crate.action.FutureActionListener;
 import io.crate.action.LimitedExponentialBackoff;
 import io.crate.concurrent.CompletableFutures;
@@ -287,70 +286,78 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
             || pendingRequestsByIndex.size() > createIndicesBulkSize) {
 
             return createPendingIndices()
-                .thenCompose(resp -> sendRequests(isLastBatch));
+                .thenCompose(resp -> validateAndDispatchBatchExecution());
         }
-        return sendRequests(isLastBatch);
+        return validateAndDispatchBatchExecution();
     }
 
-    private CompletableFuture<BitSet> sendRequests(boolean isLastBatch) {
+    private CompletableFuture<BitSet> validateAndDispatchBatchExecution() {
         if (requestsByShard.isEmpty()) {
             return CompletableFuture.completedFuture(responses);
         }
-        CompletableFuture<BitSet> sendRequestsResult = new CompletableFuture<>();
-        AtomicInteger numRequests = new AtomicInteger(requestsByShard.size());
+        CompletableFuture<BitSet> executeBatchFuture = new CompletableFuture<>();
+        boolean isExecutionPossibleOnAllNodes = true;
+
+        for (ShardLocation shardLocation : requestsByShard.keySet()) {
+            String requestNodeId = shardLocation.nodeId;
+            if (nodeJobsCounter.getInProgressJobsForNode(requestNodeId) >= MAX_NODE_CONCURRENT_OPERATIONS) {
+                isExecutionPossibleOnAllNodes = false;
+            }
+        }
+
         Map<ShardLocation, TReq> batchRequests = new HashMap<>(requestsByShard);
         requestsByShard.clear();
 
-        for (Iterator<Map.Entry<ShardLocation, TReq>> it = Iterables.cycle(batchRequests.entrySet()).iterator();
-             it.hasNext(); ) {
+        if (isExecutionPossibleOnAllNodes) {
+            sendRequestsForBatch(executeBatchFuture, batchRequests);
+        } else {
+            collectingEnabled = false;
+            scheduler.schedule(() ->
+                sendRequestsForBatch(executeBatchFuture, batchRequests), 100, TimeUnit.MILLISECONDS);
+        }
+        return executeBatchFuture;
+    }
+
+    private void sendRequestsForBatch(CompletableFuture<BitSet> batchResultFuture, Map<ShardLocation, TReq> batchRequests) {
+        AtomicInteger numRequests = new AtomicInteger(batchRequests.size());
+        Iterator<Map.Entry<ShardLocation, TReq>> it = batchRequests.entrySet().iterator();
+        while (it.hasNext()) {
             Map.Entry<ShardLocation, TReq> entry = it.next();
             TReq request = entry.getValue();
-            String requestNodeId = entry.getKey().nodeId;
+            it.remove();
 
-            if (nodeJobsCounter.getInProgressJobsForNode(requestNodeId) < MAX_NODE_CONCURRENT_OPERATIONS) {
-                it.remove();
+            final ShardLocation shardLocation = entry.getKey();
+            nodeJobsCounter.increment(shardLocation.nodeId);
+            ActionListener<ShardResponse> listener = new ActionListener<ShardResponse>() {
 
-                final ShardLocation shardLocation = entry.getKey();
-                nodeJobsCounter.increment(shardLocation.nodeId);
-                ActionListener<ShardResponse> listener = new ActionListener<ShardResponse>() {
-
-                    @Override
-                    public void onResponse(ShardResponse shardResponse) {
-                        nodeJobsCounter.decrement(shardLocation.nodeId);
-                        processShardResponse(shardResponse);
-                        countdown();
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        nodeJobsCounter.decrement(shardLocation.nodeId);
-                        countdown();
-                    }
-
-                    private void countdown() {
-                        if (numRequests.decrementAndGet() == 0) {
-                            sendRequestsResult.complete(responses);
-                        }
-                    }
-                };
-
-                listener = new RetryListener<>(
-                    scheduler,
-                    l -> requestExecutor.execute(request, l),
-                    listener,
-                    BACK_OFF_POLICY
-                );
-                requestExecutor.execute(request, listener);
-            } else {
-                // disable async collection
-                collectionEnabled = false;
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
+                @Override
+                public void onResponse(ShardResponse shardResponse) {
+                    nodeJobsCounter.decrement(shardLocation.nodeId);
+                    processShardResponse(shardResponse);
+                    countdown();
                 }
-            }
+
+                @Override
+                public void onFailure(Exception e) {
+                    nodeJobsCounter.decrement(shardLocation.nodeId);
+                    countdown();
+                }
+
+                private void countdown() {
+                    if (numRequests.decrementAndGet() == 0) {
+                        batchResultFuture.complete(responses);
+                    }
+                }
+            };
+
+            listener = new RetryListener<>(
+                scheduler,
+                l -> requestExecutor.execute(request, l),
+                listener,
+                BACK_OFF_POLICY
+            );
+            requestExecutor.execute(request, listener);
         }
-        return sendRequestsResult;
     }
 
     private void processShardResponse(ShardResponse shardResponse) {
