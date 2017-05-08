@@ -66,7 +66,7 @@ public enum Operation {
     public static void blockedRaiseException(TableInfo tableInfo, Operation operation) {
         if (!tableInfo.supportedOperations().contains(operation)) {
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "relation \"%s\" doesn't support or allow %s operations", tableInfo.ident().fqn(), operation));
+                "The relation \"%s\" doesn't support or allow %s operations.", tableInfo.ident().fqn(), operation));
         }
     }
 
