@@ -111,9 +111,6 @@ public class AlterTableOperation {
     public CompletableFuture<Long> executeAlterTableOpenClose(final AlterTableOpenCloseAnalyzedStatement analysis) {
         List<CompletableFuture<Long>> results = new ArrayList<>(2);
         DocTableInfo table = analysis.table();
-
-
-
         if (table.isPartitioned()) {
             Optional<PartitionName> partitionName = analysis.partitionName();
             if (partitionName.isPresent()) {
@@ -125,15 +122,23 @@ public class AlterTableOperation {
                     results.add(closeTable(idx));
                 }
             } else {
-                LinkedHashMap<String, Object> metaMap = new LinkedHashMap<>();
+                HashMap<String, Object> metaMap = new HashMap<>();
+                metaMap.put("_meta", new HashMap(){{put("closed", true);}});
+
+                if (analysis.openTable()) {
+                    // Remove the mapping from the template.
+                    results.add(updateTemplate(new HashMap<>(), metaMap, Settings.EMPTY, table.ident()));
+                } else {
+                    // Otherwise, add the mapping.
+                    results.add(updateTemplate(metaMap, Settings.EMPTY, table.ident()));
+                }
+
                 if (!analysis.excludePartitions() && analysis.table().partitions().size() > 0) {
                     String[] indices = Stream.of(table.concreteIndices()).toArray(String[]::new);
                     if (analysis.openTable()) {
                         results.add(openTable(indices));
                     } else {
                         results.add(closeTable(indices));
-                        metaMap.put("_meta", new LinkedHashMap(){{put("closed", true);}});
-                        results.add(updateTemplate(metaMap, null, table.ident()));
                     }
                 }
             }
@@ -256,6 +261,13 @@ public class AlterTableOperation {
     private CompletableFuture<Long> updateTemplate(Map<String, Object> newMappings,
                                                    Settings newSettings,
                                                    TableIdent tableIdent) {
+        return updateTemplate(newMappings, new HashMap<>(), newSettings, tableIdent);
+    }
+
+    private CompletableFuture<Long> updateTemplate(Map<String, Object> newMappings,
+                                                   Map<String, Object> mappingsToRemove,
+                                                   Settings newSettings,
+                                                   TableIdent tableIdent) {
         String templateName = PartitionName.templateName(tableIdent.schema(), tableIdent.name());
         IndexTemplateMetaData indexTemplateMetaData =
             clusterService.state().metaData().templates().get(templateName);
@@ -266,12 +278,14 @@ public class AlterTableOperation {
         // merge mappings
         Map<String, Object> mapping = mergeTemplateMapping(indexTemplateMetaData, newMappings);
 
+        // remove mappings
+
+        mapping = removeFromMapping(mapping, mappingsToRemove);
+
         // merge settings
         Settings.Builder settingsBuilder = Settings.builder();
         settingsBuilder.put(indexTemplateMetaData.settings());
-        if (newSettings != null) {
-            settingsBuilder.put(newSettings);
-        }
+        settingsBuilder.put(newSettings);
 
         PutIndexTemplateRequest request = new PutIndexTemplateRequest(templateName)
             .create(false)
@@ -344,6 +358,21 @@ public class AlterTableOperation {
         }
         XContentHelper.update(mergedMapping, newMapping, false);
         return mergedMapping;
+    }
+
+    private Map<String, Object> removeFromMapping(Map<String, Object> mapping, Map<String, Object> mappingsToRemove) {
+        for (String key : mappingsToRemove.keySet()) {
+            if (mapping.containsKey(key)) {
+                if (mapping.get(key) instanceof Map) {
+                    mapping.put(key, removeFromMapping( (Map<String, Object>) mapping.get(key),
+                                                 (Map<String, Object>) mappingsToRemove.get(key)));
+                } else {
+                    mapping.remove(key);
+                }
+            }
+        }
+
+        return mapping;
     }
 
     private CompletableFuture<Long> updateSettings(TableParameter concreteTableParameter, String... indices) {
