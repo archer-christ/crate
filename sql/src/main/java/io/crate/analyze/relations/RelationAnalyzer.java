@@ -438,11 +438,6 @@ public class RelationAnalyzer extends DefaultTraversalVisitor<AnalyzedRelation, 
         AnalyzedRelation tableRelation;
         // Dispatching of doc relations is based on the returned class of the schema information.
         if (tableInfo instanceof DocTableInfo) {
-            if (((DocTableInfo) tableInfo).isClosed()) {
-                throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                    "The table %s is closed. No operation beside opening it using ALTER is supported.",
-                    tableInfo.ident()));
-            }
             tableRelation = new DocTableRelation((DocTableInfo) tableInfo);
         } else {
             tableRelation = new TableRelation(tableInfo);

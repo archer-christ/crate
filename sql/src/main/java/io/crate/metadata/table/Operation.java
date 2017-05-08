@@ -52,7 +52,10 @@ public enum Operation {
             .put(IndexMetaData.SETTING_BLOCKS_METADATA, EnumSet.of(READ, INSERT, UPDATE, DELETE, ALTER_OPEN_CLOSE))
             .map();
 
-    public static EnumSet<Operation> buildFromIndexSettings(Settings settings) {
+    public static EnumSet<Operation> buildFromIndexSettingsAndState(Settings settings, IndexMetaData.State state) {
+        if (state == IndexMetaData.State.CLOSE) {
+            return EnumSet.of(ALTER_OPEN_CLOSE);
+        }
         Set<Operation> operations = ALL;
         for (Map.Entry<String, EnumSet<Operation>> entry : BLOCK_SETTING_TO_OPERATIONS_MAP.entrySet()) {
             if (!settings.getAsBoolean(entry.getKey(), false)) {
@@ -65,8 +68,15 @@ public enum Operation {
 
     public static void blockedRaiseException(TableInfo tableInfo, Operation operation) {
         if (!tableInfo.supportedOperations().contains(operation)) {
+            String exceptionMessage;
+            // If the only supported operation is open/close, then the table must be closed.
+            if (tableInfo.supportedOperations().equals(EnumSet.of(Operation.ALTER_OPEN_CLOSE))) {
+                exceptionMessage = "The relation \"%s\" doesn't support or allow %s operations, as it is currently closed.";
+            } else {
+                exceptionMessage = "The relation \"%s\" doesn't support or allow %s operations.";
+            }
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The relation \"%s\" doesn't support or allow %s operations.", tableInfo.ident().fqn(), operation));
+                exceptionMessage, tableInfo.ident().fqn(), operation));
         }
     }
 

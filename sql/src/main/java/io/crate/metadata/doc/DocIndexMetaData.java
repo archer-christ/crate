@@ -135,7 +135,7 @@ public class DocIndexMetaData {
         if (isAlias && partitionedByList.isEmpty()) {
             supportedOperations = Operation.READ_ONLY;
         } else {
-            supportedOperations = Operation.buildFromIndexSettings(metaData.getSettings());
+            supportedOperations = Operation.buildFromIndexSettingsAndState(metaData.getSettings(), metaData.getState());
         }
         versionCreated = getVersionCreated(mappingMap);
         versionUpgraded = getVersionUpgraded(mappingMap);
