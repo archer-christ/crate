@@ -120,7 +120,9 @@ public class AlterTableOperation {
             concreteIndices = analysis.table().concreteIndices();
             if(table.isPartitioned()) {
                 HashMap<String, Object> metaMap = new HashMap<>();
-                metaMap.put("_meta", new HashMap(){{put("closed", true);}});
+                HashMap<String, Object> innerMap = new HashMap<>();
+                innerMap.put("closed", true);
+                metaMap.put("_meta", innerMap);
                 if (analysis.openTable()) {
                     //Remove the mapping from the template.
                     results.add(updateTemplate(new HashMap<>(), metaMap, Settings.EMPTY, table.ident()));
