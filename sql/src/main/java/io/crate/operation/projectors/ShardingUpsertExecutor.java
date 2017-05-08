@@ -23,6 +23,7 @@
 package io.crate.operation.projectors;
 
 import com.carrotsearch.hppc.IntArrayList;
+import com.google.common.collect.Iterables;
 import io.crate.action.FutureActionListener;
 import io.crate.action.LimitedExponentialBackoff;
 import io.crate.concurrent.CompletableFutures;
@@ -71,6 +72,8 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import static io.crate.operation.NodeJobsCounter.MAX_NODE_CONCURRENT_OPERATIONS;
+
 public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TItem extends ShardRequest.Item>
     implements Function<BatchIterator, CompletableFuture<? extends Iterable<Row>>> {
 
@@ -83,7 +86,7 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
 
     private final ClusterService clusterService;
     private final ScheduledExecutorService scheduler;
-    private final int batchSize;
+    private final int bulkSize;
     private int idxWithinBatch = 0;
     private final int createIndicesBulkSize;
     private final UUID jobId;
@@ -99,13 +102,15 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
     private final Map<String, List<PendingRequest<TItem>>> pendingRequestsByIndex = new HashMap<>();
     private final BitSet responses = new BitSet();
     private final NodeJobsCounter nodeJobsCounter;
+    private volatile boolean collectionEnabled = true;
 
     private int location = -1;
+    private List<CompletableFuture<BitSet>> batchExecutionFutures = new ArrayList<>();
 
     public ShardingUpsertExecutor(ClusterService clusterService,
                                   NodeJobsCounter nodeJobsCounter,
                                   ScheduledExecutorService scheduler,
-                                  int batchSize,
+                                  int bulkSize,
                                   int createIndicesBulkSize,
                                   UUID jobId,
                                   RowShardResolver rowShardResolver,
@@ -119,7 +124,7 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
         this.clusterService = clusterService;
         this.nodeJobsCounter = nodeJobsCounter;
         this.scheduler = scheduler;
-        this.batchSize = batchSize;
+        this.bulkSize = bulkSize;
         this.createIndicesBulkSize = createIndicesBulkSize;
         this.jobId = jobId;
         this.rowShardResolver = rowShardResolver;
@@ -148,18 +153,30 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
     private CompletionStage<BitSet> consumeIterator(BatchIterator batchIterator) {
         Row row = RowBridging.toRow(batchIterator.rowData());
         try {
-            while (batchIterator.moveNext()) {
-                onRow(row);
-                if (idxWithinBatch == batchSize) {
-                    CompletableFuture<BitSet> executeBatchFuture = execute(false);
+            while (collectionEnabled && batchIterator.moveNext()) {
+                if (idxWithinBatch == bulkSize) {
                     idxWithinBatch = 0;
-                    return executeBatchFuture.thenCompose(r -> consumeIterator(batchIterator));
+                    batchExecutionFutures.add(execute(false));
                 }
+                onRow(row);
+            }
+
+            if (collectionEnabled == false) {
+                // resume iterator consumption when the in-progress batches are done
+                return CompletableFutures.allAsList(batchExecutionFutures).
+                    thenCompose(r -> {
+                        collectionEnabled = true;
+                        return consumeIterator(batchIterator);
+                    });
             }
 
             if (batchIterator.allLoaded()) {
                 batchIterator.close();
-                return execute(true);
+                // execute last batch and return a completion stage that completes with the responses
+                // when all in progress batches complete
+                batchExecutionFutures.add(execute(true));
+                return CompletableFutures.allAsList(batchExecutionFutures).
+                    thenCompose(r -> CompletableFuture.completedFuture(responses));
             } else {
                 return batchIterator.loadNextBatch().thenCompose(r -> consumeIterator(batchIterator));
             }
@@ -281,42 +298,57 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
         }
         CompletableFuture<BitSet> sendRequestsResult = new CompletableFuture<>();
         AtomicInteger numRequests = new AtomicInteger(requestsByShard.size());
-        for (Iterator<Map.Entry<ShardLocation, TReq>> it = requestsByShard.entrySet().iterator(); it.hasNext(); ) {
+        Map<ShardLocation, TReq> batchRequests = new HashMap<>(requestsByShard);
+        requestsByShard.clear();
+
+        for (Iterator<Map.Entry<ShardLocation, TReq>> it = Iterables.cycle(batchRequests.entrySet()).iterator();
+             it.hasNext(); ) {
             Map.Entry<ShardLocation, TReq> entry = it.next();
             TReq request = entry.getValue();
-            it.remove();
+            String requestNodeId = entry.getKey().nodeId;
 
-            final ShardLocation shardLocation = entry.getKey();
-            nodeJobsCounter.increment(shardLocation.nodeId);
-            ActionListener<ShardResponse> listener = new ActionListener<ShardResponse>() {
+            if (nodeJobsCounter.getInProgressJobsForNode(requestNodeId) < MAX_NODE_CONCURRENT_OPERATIONS) {
+                it.remove();
 
-                @Override
-                public void onResponse(ShardResponse shardResponse) {
-                    nodeJobsCounter.decrement(shardLocation.nodeId);
-                    processShardResponse(shardResponse);
-                    countdown();
-                }
+                final ShardLocation shardLocation = entry.getKey();
+                nodeJobsCounter.increment(shardLocation.nodeId);
+                ActionListener<ShardResponse> listener = new ActionListener<ShardResponse>() {
 
-                @Override
-                public void onFailure(Exception e) {
-                    nodeJobsCounter.decrement(shardLocation.nodeId);
-                    countdown();
-                }
-
-                private void countdown() {
-                    if (numRequests.decrementAndGet() == 0) {
-                        sendRequestsResult.complete(responses);
+                    @Override
+                    public void onResponse(ShardResponse shardResponse) {
+                        nodeJobsCounter.decrement(shardLocation.nodeId);
+                        processShardResponse(shardResponse);
+                        countdown();
                     }
-                }
-            };
 
-            listener = new RetryListener<>(
-                scheduler,
-                l -> requestExecutor.execute(request, l),
-                listener,
-                BACK_OFF_POLICY
-            );
-            requestExecutor.execute(request, listener);
+                    @Override
+                    public void onFailure(Exception e) {
+                        nodeJobsCounter.decrement(shardLocation.nodeId);
+                        countdown();
+                    }
+
+                    private void countdown() {
+                        if (numRequests.decrementAndGet() == 0) {
+                            sendRequestsResult.complete(responses);
+                        }
+                    }
+                };
+
+                listener = new RetryListener<>(
+                    scheduler,
+                    l -> requestExecutor.execute(request, l),
+                    listener,
+                    BACK_OFF_POLICY
+                );
+                requestExecutor.execute(request, listener);
+            } else {
+                // disable async collection
+                collectionEnabled = false;
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                }
+            }
         }
         return sendRequestsResult;
     }
@@ -335,18 +367,6 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
                 }
             }
         }
-    }
-
-    private Iterator<? extends Row> createResultIt(boolean isLastBatch) {
-        Iterator<? extends Row> iterator;
-        if (isLastBatch) {
-            synchronized (responses) {
-                iterator = Collections.<Row>singletonList(new Row1((long) responses.cardinality())).iterator();
-            }
-        } else {
-            iterator = Collections.emptyIterator();
-        }
-        return iterator;
     }
 
     private CompletableFuture<BulkCreateIndicesResponse> createPendingIndices() {
