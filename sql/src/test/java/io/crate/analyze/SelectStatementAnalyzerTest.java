@@ -576,8 +576,17 @@ public class SelectStatementAnalyzerTest extends CrateDummyClusterServiceUnitTes
     public void testSelectDistinctWithGroupBy() {
         expectedException.expect(UnsupportedOperationException.class);
         expectedException.expectMessage("Cannot use DISTINCT when GROUP BY is used");
-        analyze("select distinct name from users group by id, name");
-        analyze("select distinct name as dname from users group by dname, name");
+        analyze("select distinct max(id) from users group by name");
+    }
+
+    @Test
+    public void testSelectDistinctWithGroupBySameFields() {
+        SelectAnalyzedStatement distinctAnalysis = analyze("select distinct id, name from users group by id, name");
+        SelectAnalyzedStatement groupByAnalysis = analyze("select id, name from users group by id, name");
+        assertThat(distinctAnalysis.relation().querySpec().groupBy(),
+                   equalTo(groupByAnalysis.relation().querySpec().groupBy()));
+        assertThat(distinctAnalysis.relation().querySpec().outputs(),
+                   equalTo(groupByAnalysis.relation().querySpec().outputs()));
     }
 
     @Test

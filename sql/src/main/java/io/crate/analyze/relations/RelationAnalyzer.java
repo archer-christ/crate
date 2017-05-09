@@ -187,14 +187,12 @@ public class RelationAnalyzer extends DefaultTraversalVisitor<AnalyzedRelation, 
         if (!node.getGroupBy().isEmpty() || expressionAnalysisContext.hasAggregates) {
             ensureNonAggregatesInGroupBy(selectAnalysis.outputSymbols(), selectAnalysis.outputNames(), groupBy);
         }
-        boolean isDistinct = false;
         if (node.getSelect().isDistinct()) {
-            if (groupBy.isEmpty()) {
-                groupBy = rewriteGlobalDistinct(selectAnalysis.outputSymbols());
-                isDistinct = true;
-            } else if (Collections.indexOfSubList(selectAnalysis.outputSymbols(), groupBy) < 0) {
+            List<Symbol> newGroupBy = rewriteGlobalDistinct(selectAnalysis.outputSymbols());
+            if (!groupBy.isEmpty() && !newGroupBy.equals(groupBy)) {
                 throw new UnsupportedOperationException("Cannot use DISTINCT when GROUP BY is used");
             }
+            groupBy = newGroupBy;
         }
         if (groupBy != null && groupBy.isEmpty()) {
             groupBy = null;

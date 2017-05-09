@@ -31,6 +31,10 @@ Changes
 Fixes
 =====
 
+ - Fixed validation so that ``SELECT DISTINCT`` can be used only if there
+   is no ``GROUP BY`` present or if symbols of select list are exactly the
+   same as the ones in group by.
+
  - Added validation that ``ORDER BY`` symbols are included in the ``SELECT``
    list when ``DISTINCT`` is used.
 
