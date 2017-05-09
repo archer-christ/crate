@@ -32,8 +32,8 @@ import io.crate.test.integration.CrateUnitTest;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.Settings;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
@@ -115,6 +115,27 @@ public class PingTaskTest extends CrateUnitTest {
     }
 
     @Test
+    public void testLicenseIdent() throws Exception {
+        PingTask pingTask = new PingTask(
+            clusterService,
+            clusterIdService,
+            extendedNodeInfo,
+            "http://dummy",
+            Settings.EMPTY
+        );
+        // If the setting is not set an empty string is sent
+        assertThat(pingTask.getLicenseIdent(), is(""));
+        pingTask = new PingTask(
+            clusterService,
+            clusterIdService,
+            extendedNodeInfo,
+            "http://dummy",
+            Settings.builder().put(SharedSettings.LICENSE_IDENT_SETTING.getKey(), "my-license-ident").build()
+        );
+        assertThat(pingTask.getLicenseIdent(), is("my-license-ident"));
+    }
+
+    @Test
     public void testSuccessfulPingTaskRun() throws Exception {
         testServer = new HttpTestServer(18080, false);
         testServer.run();
@@ -159,6 +180,7 @@ public class PingTaskTest extends CrateUnitTest {
             assertThat(map.get("crate_version"), is(notNullValue()));
             assertThat(map, hasKey("java_version"));
             assertThat(map.get("java_version"), is(notNullValue()));
+            assertThat(map.get("license_ident"), is(""));
         }
     }
 

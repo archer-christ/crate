@@ -102,6 +102,11 @@ public class PingTask extends TimerTask {
         return SharedSettings.ENTERPRISE_LICENSE_SETTING.setting().getRaw(settings);
     }
 
+    @VisibleForTesting
+    String getLicenseIdent() {
+        return SharedSettings.LICENSE_IDENT_SETTING.setting().get(settings);
+    }
+
     private Map<String, Object> getCounters() {
         return new HashMap<String, Object>() {{
             put("success", successCounter.get());
@@ -137,6 +142,7 @@ public class PingTask extends TimerTask {
         queryMap.put("hardware_address", getHardwareAddress());
         queryMap.put("crate_version", getCrateVersion());
         queryMap.put("java_version", getJavaVersion());
+        queryMap.put("license_ident", getLicenseIdent());
 
         if (logger.isDebugEnabled()) {
             logger.debug("Sending data: {}", queryMap);
