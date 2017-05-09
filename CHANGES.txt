@@ -21,6 +21,7 @@ Breaking Changes
 Changes
 =======
 
+ - Added support for ``DISTINCT`` on queries with
  - Added support for ``GROUP BY`` in combination with subselect. E.g.::
 
      select x, count(*) from (select x from t limit 1) as tt group by x;

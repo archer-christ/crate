@@ -1159,4 +1159,16 @@ public class GroupByAggregateTest extends SQLTransportIntegrationTest {
         assertEquals(2L, response.rowCount());
     }
 
+    @Test
+    public void testDistinctWithGroupBy() throws Exception {
+        execute("create table t (a integer, b integer)");
+        ensureYellow();
+        execute("insert into t(a, b) values(1,1), (1,2), (1,3), (2,1), (2,2), (2,3), (2,4), (3,1), (3,2)");
+        execute("refresh table t");
+
+        execute("select DISTINCT max(a), min(a) from t group by b order by 2, 1");
+        assertThat(TestingHelpers.printedTable(response.rows()), is("2| 1\n" +
+                                                                    "3| 1\n" +
+                                                                    "2| 2\n"));
+    }
 }
