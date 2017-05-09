@@ -78,7 +78,7 @@ public class MultiSourceSelect implements QueriedRelation {
             QuerySpec spec = splitter.getSpec(relation);
             QueriedRelation queriedRelation = Relations.upgrade(functions, transactionContext, relation, spec);
             Function<Field, Field> convertField = f -> {
-                if (f.relation() == relation) {
+                if (f.relation().equals(relation)) {
                     return queriedRelation.getField(f.path(), Operation.READ);
                 }
                 return f;

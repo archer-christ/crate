@@ -261,7 +261,7 @@ public class ManyTableConsumer implements Consumer {
                 final AnalyzedRelation right = rightRelation;
 
                 Function<? super Symbol, ? extends Symbol> replaceFunction = FieldReplacer.bind(f -> {
-                    if (f.relation() == left || f.relation() == right) {
+                    if (f.relation().equals(left) || f.relation().equals(right)) {
                         // path is prefixed with relationName so that they are still unique
                         ColumnIdent path = new ColumnIdent(f.relation().getQualifiedName().toString(), f.path().outputName());
                         Field field = join.getField(path, Operation.READ);
