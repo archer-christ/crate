@@ -88,7 +88,7 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
     private final ClusterService clusterService;
     private final ScheduledExecutorService scheduler;
     private final int bulkSize;
-    private int idxWithinBatch = 0;
+    private int idxWithinBulk = 0;
     private final int createIndicesBulkSize;
     private final UUID jobId;
     private final RowShardResolver rowShardResolver;
@@ -106,8 +106,8 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
     private volatile boolean collectingEnabled = true;
 
     private int location = -1;
-    private List<CompletableFuture<BitSet>> batchExecutionFutures = new ArrayList<>();
-    private Queue<Runnable> parkedBatches = new ConcurrentLinkedQueue<>();
+    private List<CompletableFuture<BitSet>> bulkExecutionFutures = new ArrayList<>();
+    private Queue<Runnable> parkedBulks = new ConcurrentLinkedQueue<>();
 
     public ShardingUpsertExecutor(ClusterService clusterService,
                                   NodeJobsCounter nodeJobsCounter,
@@ -156,16 +156,16 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
         Row row = RowBridging.toRow(batchIterator.rowData());
         try {
             while (collectingEnabled && batchIterator.moveNext()) {
-                if (idxWithinBatch == bulkSize) {
-                    idxWithinBatch = 0;
-                    batchExecutionFutures.add(execute(false));
+                if (idxWithinBulk == bulkSize) {
+                    idxWithinBulk = 0;
+                    bulkExecutionFutures.add(execute(false));
                 }
                 onRow(row);
             }
 
             if (collectingEnabled == false) {
-                // resume iterator consumption when the in-progress batches are done
-                return CompletableFutures.allAsList(batchExecutionFutures).
+                // resume iterator consumption when the in-progress bulks are done
+                return CompletableFutures.allAsList(bulkExecutionFutures).
                     thenCompose(r -> {
                         collectingEnabled = true;
                         return consumeIterator(batchIterator);
@@ -174,10 +174,10 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
 
             if (batchIterator.allLoaded()) {
                 batchIterator.close();
-                // execute last batch and return a completion stage that completes with the responses
-                // when all in progress batches complete
-                batchExecutionFutures.add(execute(true));
-                return CompletableFutures.allAsList(batchExecutionFutures).
+                // execute last bulk and return a completion stage that completes with the responses
+                // when all in progress bulks complete
+                bulkExecutionFutures.add(execute(true));
+                return CompletableFutures.allAsList(bulkExecutionFutures).
                     thenCompose(r -> CompletableFuture.completedFuture(responses));
             } else {
                 return batchIterator.loadNextBatch().thenCompose(r -> consumeIterator(batchIterator));
@@ -189,7 +189,7 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
     }
 
     private void onRow(Row row) {
-        idxWithinBatch++;
+        idxWithinBulk++;
         rowShardResolver.setNextRow(row);
         for (int i = 0; i < expressions.size(); i++) {
             CollectExpression<Row, ?> collectExpression = expressions.get(i);
@@ -320,7 +320,7 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
             sendRequestsForBulk(executeBulkFuture, bulkRequests);
         } else {
             collectingEnabled = false;
-            parkedBatches.add(() -> validateAndDispatchBulkExecution(bulkRequests, executeBulkFuture));
+            parkedBulks.add(() -> validateAndDispatchBulkExecution(bulkRequests, executeBulkFuture));
         }
     }
 
@@ -341,14 +341,14 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
                     nodeJobsCounter.decrement(shardLocation.nodeId);
                     processShardResponse(shardResponse);
                     countdown();
-                    triggerParkedBatch();
+                    triggerParkedBulk();
                 }
 
                 @Override
                 public void onFailure(Exception e) {
                     nodeJobsCounter.decrement(shardLocation.nodeId);
                     countdown();
-                    triggerParkedBatch();
+                    triggerParkedBulk();
                 }
 
                 private void countdown() {
@@ -357,10 +357,10 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
                     }
                 }
 
-                private void triggerParkedBatch() {
-                    Runnable parkedBatch = parkedBatches.poll();
-                    if(parkedBatch != null) {
-                        parkedBatch.run();
+                private void triggerParkedBulk() {
+                    Runnable parkedBulk = parkedBulks.poll();
+                    if(parkedBulk != null) {
+                        parkedBulk.run();
                     }
                 }
             };
