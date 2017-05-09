@@ -61,9 +61,11 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -105,6 +107,7 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
 
     private int location = -1;
     private List<CompletableFuture<BitSet>> batchExecutionFutures = new ArrayList<>();
+    private Queue<Runnable> parkedBatches = new ConcurrentLinkedQueue<>();
 
     public ShardingUpsertExecutor(ClusterService clusterService,
                                   NodeJobsCounter nodeJobsCounter,
@@ -282,45 +285,48 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
     }
 
     private CompletableFuture<BitSet> execute(boolean isLastBatch) {
-        if ((isLastBatch && pendingRequestsByIndex.isEmpty() == false)
-            || pendingRequestsByIndex.size() > createIndicesBulkSize) {
-
-            return createPendingIndices()
-                .thenCompose(resp -> validateAndDispatchBatchExecution());
-        }
-        return validateAndDispatchBatchExecution();
-    }
-
-    private CompletableFuture<BitSet> validateAndDispatchBatchExecution() {
         if (requestsByShard.isEmpty()) {
             return CompletableFuture.completedFuture(responses);
         }
-        CompletableFuture<BitSet> executeBatchFuture = new CompletableFuture<>();
+
+        CompletableFuture<BitSet> executeBulkFuture = new CompletableFuture<>();
+        Map<ShardLocation, TReq> bulkRequests = new HashMap<>(requestsByShard);
+        requestsByShard.clear();
+
+        if ((isLastBatch && pendingRequestsByIndex.isEmpty() == false)
+            || pendingRequestsByIndex.size() > createIndicesBulkSize) {
+
+            createPendingIndices()
+                .thenAccept(resp -> validateAndDispatchBulkExecution(bulkRequests, executeBulkFuture));
+        } else {
+            validateAndDispatchBulkExecution(bulkRequests, executeBulkFuture);
+        }
+
+        return executeBulkFuture;
+    }
+
+    private void validateAndDispatchBulkExecution(Map<ShardLocation, TReq> bulkRequests,
+                                                  CompletableFuture<BitSet> executeBulkFuture) {
         boolean isExecutionPossibleOnAllNodes = true;
 
-        for (ShardLocation shardLocation : requestsByShard.keySet()) {
+        for (ShardLocation shardLocation : bulkRequests.keySet()) {
             String requestNodeId = shardLocation.nodeId;
             if (nodeJobsCounter.getInProgressJobsForNode(requestNodeId) >= MAX_NODE_CONCURRENT_OPERATIONS) {
                 isExecutionPossibleOnAllNodes = false;
             }
         }
 
-        Map<ShardLocation, TReq> batchRequests = new HashMap<>(requestsByShard);
-        requestsByShard.clear();
-
         if (isExecutionPossibleOnAllNodes) {
-            sendRequestsForBatch(executeBatchFuture, batchRequests);
+            sendRequestsForBulk(executeBulkFuture, bulkRequests);
         } else {
             collectingEnabled = false;
-            scheduler.schedule(() ->
-                sendRequestsForBatch(executeBatchFuture, batchRequests), 100, TimeUnit.MILLISECONDS);
+            parkedBatches.add(() -> validateAndDispatchBulkExecution(bulkRequests, executeBulkFuture));
         }
-        return executeBatchFuture;
     }
 
-    private void sendRequestsForBatch(CompletableFuture<BitSet> batchResultFuture, Map<ShardLocation, TReq> batchRequests) {
-        AtomicInteger numRequests = new AtomicInteger(batchRequests.size());
-        Iterator<Map.Entry<ShardLocation, TReq>> it = batchRequests.entrySet().iterator();
+    private void sendRequestsForBulk(CompletableFuture<BitSet> bulkResultFuture, Map<ShardLocation, TReq> bulkRequests) {
+        AtomicInteger numRequests = new AtomicInteger(bulkRequests.size());
+        Iterator<Map.Entry<ShardLocation, TReq>> it = bulkRequests.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<ShardLocation, TReq> entry = it.next();
             TReq request = entry.getValue();
@@ -335,17 +341,26 @@ public class ShardingUpsertExecutor<TReq extends ShardRequest<TReq, TItem>, TIte
                     nodeJobsCounter.decrement(shardLocation.nodeId);
                     processShardResponse(shardResponse);
                     countdown();
+                    triggerParkedBatch();
                 }
 
                 @Override
                 public void onFailure(Exception e) {
                     nodeJobsCounter.decrement(shardLocation.nodeId);
                     countdown();
+                    triggerParkedBatch();
                 }
 
                 private void countdown() {
                     if (numRequests.decrementAndGet() == 0) {
-                        batchResultFuture.complete(responses);
+                        bulkResultFuture.complete(responses);
+                    }
+                }
+
+                private void triggerParkedBatch() {
+                    Runnable parkedBatch = parkedBatches.poll();
+                    if(parkedBatch != null) {
+                        parkedBatch.run();
                     }
                 }
             };
