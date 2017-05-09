@@ -27,6 +27,7 @@ import io.crate.metadata.Schemas;
 import io.crate.metadata.TableIdent;
 import io.crate.metadata.doc.DocTableInfo;
 import io.crate.metadata.table.Operation;
+import io.crate.metadata.table.TableInfo;
 import io.crate.sql.tree.AlterTable;
 import io.crate.sql.tree.Assignment;
 import io.crate.sql.tree.Table;
@@ -46,13 +47,21 @@ class AlterTableAnalyzer {
 
     public AlterTableAnalyzedStatement analyze(AlterTable node, Row parameters, String defaultSchema) {
         Table table = node.table();
-        DocTableInfo tableInfo = schemas.getAlterableTable(TableIdent.of(table, defaultSchema));
-        PartitionName partitionName = getPartitionName(table.partitionProperties(), tableInfo, parameters);
+        TableInfo tableInfo = schemas.getTableInfo(TableIdent.of(table, defaultSchema));
 
-        TableParameterInfo tableParameterInfo = getTableParameterInfo(table, tableInfo, partitionName);
+        // If the returned TableInfo is not of type DocTableInfo, then it is a system table.
+        if  (!(tableInfo instanceof DocTableInfo)) {
+            Operation.blockedRaiseException(tableInfo, Operation.ALTER);
+        }
+
+        DocTableInfo docTableInfo = (DocTableInfo) tableInfo;
+
+        PartitionName partitionName = getPartitionName(table.partitionProperties(), docTableInfo, parameters);
+
+        TableParameterInfo tableParameterInfo = getTableParameterInfo(table, docTableInfo, partitionName);
         TableParameter tableParameter = getTableParameter(node, parameters, tableParameterInfo);
-        maybeRaiseBlockedException(tableInfo, tableParameter.settings());
-        return new AlterTableAnalyzedStatement(tableInfo, partitionName, tableParameter, table.excludePartitions());
+        maybeRaiseBlockedException(docTableInfo, tableParameter.settings());
+        return new AlterTableAnalyzedStatement(docTableInfo, partitionName, tableParameter, table.excludePartitions());
     }
 
     private static TableParameterInfo getTableParameterInfo(Table table,

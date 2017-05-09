@@ -36,7 +36,6 @@ import io.crate.metadata.table.Operation;
 import io.crate.metadata.table.SchemaInfo;
 import io.crate.metadata.table.TableInfo;
 import io.crate.operation.udf.UserDefinedFunctionMetaData;
-import io.crate.operation.udf.UserDefinedFunctionService;
 import io.crate.operation.udf.UserDefinedFunctionsMetaData;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterStateListener;
@@ -82,52 +81,22 @@ public class Schemas extends AbstractLifecycleComponent implements Iterable<Sche
         this.defaultTemplateService = new DefaultTemplateService(settings, clusterService);
     }
 
-    public DocTableInfo getDroppableTable(TableIdent tableIdent) {
+    /**
+     * @param tableIdent the table ident to get a DocTableInfo for
+     * @param operation The operation planned to be performed on the table
+     * @return an instance of DocTableInfo for the given ident, guaranteed to support the operation that is required
+     * on it
+     */
+    public DocTableInfo getDocTableInfo(TableIdent tableIdent, Operation operation) {
         TableInfo tableInfo = getTableInfo(tableIdent);
-        Operation.blockedRaiseException(tableInfo, Operation.DROP);
-        DocTableInfo docTableInfo = (DocTableInfo) tableInfo;
-        if (docTableInfo.isAlias() && !docTableInfo.isPartitioned() && !isOrphanedAlias(docTableInfo)) {
-            throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "%s is an alias and hence not dropable.", tableInfo.ident()));
-        }
-        if (docTableInfo.isClosed()) {
-            throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is closed. No operation beside opening it using ALTER is supported.",
-                tableInfo.ident()));
-        }
-        return docTableInfo;
-    }
-
-    public DocTableInfo getWritableTable(TableIdent tableIdent) {
-        TableInfo tableInfo = getTableInfo(tableIdent);
-        if (Operation.isReadOnly(tableInfo)) {
-            throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is read-only. Only READ operations are supported.", tableInfo.ident()));
+        if (operation != null) {
+            Operation.blockedRaiseException(tableInfo, operation);
         }
         DocTableInfo docTableInfo = (DocTableInfo) tableInfo;
-        if (docTableInfo.isAlias() && !docTableInfo.isPartitioned()) {
-            throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "%s is an alias. Only READ operations are supported.", tableInfo.ident()));
-        }
-        if (docTableInfo.isClosed()) {
-            throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is closed. No operation beside opening it using ALTER is supported.",
-                tableInfo.ident()));
-        }
-        return docTableInfo;
-    }
-
-    public DocTableInfo getAlterableTable(TableIdent tableIdent) {
-        TableInfo tableInfo = getTableInfo(tableIdent);
-        // If the table is not an instance of doctableinfo, then it is a system table.
-        if (!(tableInfo instanceof DocTableInfo)) {
-            throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "The table %s is read-only. Only READ operations are supported.", tableInfo.ident()));
-        }
-        DocTableInfo docTableInfo = (DocTableInfo) tableInfo;
-        if (docTableInfo.isAlias() && !docTableInfo.isPartitioned()) {
-            throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
-                "%s is an alias. Only READ operations are supported.", tableInfo.ident()));
+        if (docTableInfo.isAlias() && docTableInfo.partitionedBy().isEmpty() && operation != Operation.READ) {
+        throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
+            "The relation \"%s\" doesn't support or allow %s operations, as it is as alias.",
+            tableInfo.ident().fqn(), operation));
         }
         return docTableInfo;
     }

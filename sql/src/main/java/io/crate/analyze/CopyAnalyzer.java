@@ -80,10 +80,9 @@ class CopyAnalyzer {
     }
 
     CopyFromAnalyzedStatement convertCopyFrom(CopyFrom node, Analysis analysis) {
-        DocTableInfo tableInfo = schemas.getWritableTable(
-            TableIdent.of(node.table(), analysis.sessionContext().defaultSchema()));
+        DocTableInfo tableInfo = schemas.getDocTableInfo(
+            TableIdent.of(node.table(), analysis.sessionContext().defaultSchema()), Operation.INSERT);
         DocTableRelation tableRelation = new DocTableRelation(tableInfo);
-        Operation.blockedRaiseException(tableInfo, Operation.INSERT);
 
         String partitionIdent = null;
         if (!node.table().partitionProperties().isEmpty()) {

@@ -23,6 +23,7 @@
 package io.crate.metadata.table;
 
 import com.google.common.collect.Sets;
+import io.crate.exceptions.UnsupportedFeatureException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.settings.Settings;
@@ -42,7 +43,7 @@ public enum Operation {
     ALTER_OPEN_CLOSE;
 
     public static final EnumSet<Operation> ALL = EnumSet.allOf(Operation.class);
-    public static final EnumSet<Operation> READ_ONLY = EnumSet.of(Operation.READ);
+    public static final EnumSet<Operation> READ_ONLY = EnumSet.of(READ);
 
     private static final Map<String, EnumSet<Operation>> BLOCK_SETTING_TO_OPERATIONS_MAP =
         MapBuilder.<String, EnumSet<Operation>>newMapBuilder()
@@ -71,16 +72,17 @@ public enum Operation {
             String exceptionMessage;
             // If the only supported operation is open/close, then the table must be closed.
             if (tableInfo.supportedOperations().equals(EnumSet.of(Operation.ALTER_OPEN_CLOSE))) {
-                exceptionMessage = "The relation \"%s\" doesn't support or allow %s operations, as it is currently closed.";
+                exceptionMessage = "The relation \"%s\" doesn't support or allow %s operations, as it is currently " +
+                                   "closed.";
+            // If the only supported operations are part of the READ_ONLY set, the table it set to read only.
+            } else if (tableInfo.supportedOperations().equals(READ_ONLY)) {
+                exceptionMessage = "The relation \"%s\" doesn't support or allow %s operations, as it is currently " +
+                                   "read-only.";
             } else {
                 exceptionMessage = "The relation \"%s\" doesn't support or allow %s operations.";
             }
             throw new UnsupportedOperationException(String.format(Locale.ENGLISH,
                 exceptionMessage, tableInfo.ident().fqn(), operation));
         }
-    }
-
-    public static boolean isReadOnly(TableInfo tableInfo) {
-        return tableInfo.supportedOperations().equals(READ_ONLY);
     }
 }
